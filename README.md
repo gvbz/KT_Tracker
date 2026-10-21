@@ -1,4 +1,4 @@
-# Kill Task Tracker (KT_Tracker)
+# Kill Task Tracker
 
 A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest statuses from a /myquests dump and then displays relevant kill task information. 
 
