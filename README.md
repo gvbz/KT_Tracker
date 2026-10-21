@@ -1,6 +1,6 @@
 # Kill Task Tracker (KT_Tracker)
 
-A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest status' from a /myquests dump and then displays relevant kill task information. The plugin runs whenever it is enabled and there are no specific start/stop buttons.
+A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest statuses from a /myquests dump and then displays relevant kill task information. The plugin runs whenever it is enabled and there are no specific start/stop buttons.
 
 <img width="618" height="328" alt="KT_tracker_2" src="https://github.com/user-attachments/assets/2552f766-2297-4f96-8184-b339a5d053da" />
 <img width="989" height="379" alt="KT_tracker_3" src="https://github.com/user-attachments/assets/9af312d4-6786-4a2b-a773-2373510978ac" />
@@ -9,15 +9,15 @@ A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest sta
 
 ## Features
 
--Displays kill task mobs on the minimap with a green triangle.
--Automatically points the navigation arrow to the closest mob.
--Automatically detects and adds custom quests, with the ability to edit quest information and categorize them by area.
--NPC indication symbols (!) based on quest status. Adjustable in the settings menu.
-  -Yellow = Available
-  -White = In progress
-  -Red = On cool-down
-  -Green = Ready to turn in
--Compares /myquests against a base set of known kill tasks quests. 
+- Displays kill task mobs on the minimap with a green triangle.
+- Automatically points the navigation arrow to the closest mob.
+- Automatically detects and adds custom quests, with the ability to edit quest information and categorize them by area.
+- NPC indication symbols (!) based on quest status. Adjustable in the settings menu.
+  - Yellow = Available
+  - White = In progress
+  - Red = On cool-down
+  - Green = Ready to turn in
+- Compares /myquests against a base set of known kill task quests.
 
 ## Requirements
 
@@ -27,8 +27,8 @@ A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest sta
 ## Install
 
 1. Download the latest zip from the [Releases](../../releases) page.
-2. Unzip and drop into `ACUnreal\Saved\ClientPlugins\Installed\KT_Tracker`.
-4. Open the plugin menu, press **Refresh**, then **Enable** the Kill Task Tracker.
+2. Unzip into `ACUnreal\Saved\ClientPlugins\Installed`. The zip contains the `KT_Tracker` folder, so the path ends in `Installed\KT_Tracker\plugin.json`.
+3. Open the plugin menu, press **Refresh**, then **Enable** the Kill Task Tracker.
 
 ## Updating
 
@@ -39,7 +39,7 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
 ### The window
 
 - **Show in NAV**: turns the green arrows over task monsters and NAV arrow integration on or off.
-- **Area list**: pick **Active** (tasks you are working on or can turn in), a specific hunting area, or **Other**. Newly detected quests that are categorized will be placed into **Other**.
+- **Area list**: pick **Active** (tasks you are working on or can turn in), a specific hunting area, or **Other**. Newly detected quests that are uncategorized will be placed into **Other**.
 - **Task lines**: one line per task, showing the task name and your kill count. The color shows the state:
   - white: in progress, with your count (e.g. `Devourer Marguls  6/15`)
   - green: ready to turn in
@@ -76,7 +76,7 @@ Open **Manage** at the bottom of the window:
   - /myquests update interval
   - scan range
   - default cooldown
-  - the ! colours
+  - the ! colors
 
 Long text in the window stays on one line. Hover over it to read all of it.
 
