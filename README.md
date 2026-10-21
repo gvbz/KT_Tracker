@@ -4,7 +4,7 @@ A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest sta
 <img width="618" height="328" alt="KT_tracker_2" src="https://github.com/user-attachments/assets/2552f766-2297-4f96-8184-b339a5d053da" />
 <img width="989" height="379" alt="KT_tracker_3" src="https://github.com/user-attachments/assets/9af312d4-6786-4a2b-a773-2373510978ac" />
 <img width="235" height="405" alt="KT_tracker_5" src="https://github.com/user-attachments/assets/26790ff4-ecab-4766-b2c1-f00d60b4f124" />
-<img width="111" height="197" alt="KT_tracker_4" src="https://github.com/user-attachments/assets/1f271d8f-b26e-40d0-aad6-a1bc62cc813f" />
+<img width="235" height="405" alt="KT_tracker_4" src="https://github.com/user-attachments/assets/1f271d8f-b26e-40d0-aad6-a1bc62cc813f" />
 
 ## Features
 
