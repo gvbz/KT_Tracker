@@ -55,7 +55,7 @@ Open **Manage** at the bottom of the window:
 
 - **Detected**: kill tasks found in your quest list or chat whose monster or quest giver isn't known yet. Fill them in and press **Save**, or press **Remove** to hide one. "Refresh list" in the quest-giver box lists the NPCs near you.
 - **Add**: add your own task, and your own areas.
-- **Quest log**: when your quest list was last read, where your files are saved, and the last kill message seen.
+- **Quest log**: when your quest list was last read, any lines it didn't understand, and where your files are saved.
 - **Options**:
   - NPC indication !
   - Automatic /myquests update

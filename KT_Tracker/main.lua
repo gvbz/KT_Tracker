@@ -17,7 +17,8 @@
 --             giver is unknown, with boxes to fill them in, or Remove
 --   Add       a new task, and areas of your own (removing one moves its tasks
 --             to Other); saved in the task database for this server
---   Quest log when the quest list was read and saved, and the last kill message
+--   Quest log when the quest list was read, lines it didn't understand, and
+--             where the quest file and task database are saved
 --   Options
 -- Every label is one line (wrap=false); long text is clipped and its full text
 -- is the tooltip. Text sizes: TXT.body 13, TXT.small 11.
@@ -72,8 +73,6 @@
 --                                                    start as the basis, rewritten
 --                                                    after every read (other
 --                                                    plugins can read it)
---   Quests/<server>_<character>_<id>_lastread.json  raw copy of the last reply
---                                                    (for checking the format)
 --   Database/KillTaskDB_<server>.json                task details for that server
 --                                                    (monsters, givers, your tasks)
 --   plus per-character progress and timers in the plugin's saved state.
@@ -713,7 +712,7 @@ local my_name, my_player, my_server = nil, nil, nil
 local mq = {sent_at = nil, req_at = nil, via = nil, lines = 0, gap = false, login_done = false,
   run = 0, active = false, run_lines = 0, run_gap = false, seen_at = -1e9, end_at = -1e9, gap_at = -1e9,
   done_lines = 0, done_ok = nil, done_unix = nil,
-  raw = {}, raw_bytes = 0, unparsed = 0, unparsed_sample = nil, raw_save = nil, done_unparsed = 0}
+  unparsed = 0, unparsed_sample = nil, done_unparsed = 0}
 
 ---------------------------------------------------------------------------
 -- Service requests (profiles files, chat) with retry on the client's rate limits
@@ -1216,8 +1215,6 @@ local function kill_line(txt, npc, wcid)
 end
 
 local function quest_line(txt)
-  -- Keep a raw copy of the reply (saved next to the quest file) for checking.
-  if #mq.raw < 2000 and mq.raw_bytes < 190000 then mq.raw[#mq.raw + 1] = txt; mq.raw_bytes = mq.raw_bytes + #txt + 8 end
   local m = regexmatch(txt, MYQ)
   if m and m["1"] then
     on_myquests(string.lower(m["1"]), tonumber(m["2"]) or 0, tonumber(m["3"]) or 0, m["4"], tonumber(m["5"]), tonumber(m["6"]))
@@ -1296,7 +1293,6 @@ local function used_at(time)
   for _, h in ipairs(sel_hist) do if h.t <= time + 0.01 then best = h end end
   return best and best.npc or nil
 end
-local kill_diag = nil  -- last kill message: text and seconds between arrival and handling
 local function read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
   sel_hist[#sel_hist + 1] = {t = tick_now, npc = use_npc}
   if #sel_hist > 40 then table.remove(sel_hist, 1) end
@@ -1322,7 +1318,6 @@ local function read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
           if contains(txt, " solves (") then enqueue(item)
           else
             process_line(item, objects_near)
-            if not hist and (contains(txt, "You have killed ") or contains(txt, "ve killed ")) then kill_diag = {txt = string.sub(txt, 1, 120), lag = tick_now - (tonumber(e.time) or tick_now)} end
           end
         end
       elseif type(e.sender) == "string" and not hist then
@@ -1465,8 +1460,7 @@ local function finish_myquests()
   mq.done_lines, mq.done_ok, mq.done_unix = mq.run_lines, not mq.run_gap, unix_now
   mq.done_unparsed = mq.unparsed
   qfile.data_at = unix_now
-  mq.raw_save = {lines = mq.raw, matched = mq.run_lines, not_understood = mq.unparsed}
-  mq.raw, mq.raw_bytes, mq.unparsed = {}, 0, 0
+  mq.unparsed = 0
   local gone = 0
   if not mq.run_gap and mq.run_lines >= 3 then
     local drop = {}
@@ -1551,12 +1545,6 @@ local function file_services(s, now)
   elseif qfile.phase == "ready" and qfile.want_save and qfile.name then
     qfile.want_save = false
     request({id = "qf_save", service = "profiles", operation = "save", group = QUEST_GROUP, name = qfile.name, data = quest_file_data(s.server)})
-    if mq.raw_save then
-      local r = mq.raw_save; mq.raw_save = nil
-      request({id = "qf_raw", service = "profiles", operation = "save", group = QUEST_GROUP, name = string.sub(qfile.name, 1, 54) .. "_lastread",
-        data = {kt_raw = true, server = my_server or "", character = my_name or "", saved = unix_now or 0,
-          matched = r.matched, not_understood = r.not_understood, lines = r.lines}})
-    end
   end
   if next(legacy_custom) and qfile.phase == "ready" then adopt_legacy() end
 end
@@ -2074,12 +2062,10 @@ local function build(s, scan)
   local log = {
     {id = "lg1", type = "text", size = TXT.body, text = qline},
     {id = "lg1b", type = "text", size = TXT.small, text = ((mq.done_unparsed or 0) > 0) and (mq.done_unparsed .. " lines not understood (example: "
-      .. tostring(mq.unparsed_sample) .. "). Raw copy: Quests/" .. tostring(qfile.name) .. "_lastread.json") or ""},
+      .. tostring(mq.unparsed_sample) .. ")") or ""},
     {id = "lg2", type = "text", size = TXT.small, text = "Quest file: " .. (qfile.name and ("Profiles/kt_tracker/Library/Quests/" .. qfile.name .. ".json") or "waiting for character")
       .. (qfile.err and (" - save failed: " .. qfile.err) or "")},
-    {id = "lg3", type = "text", size = TXT.small, text = "Task database: Profiles/kt_tracker/Library/Database/" .. db_file_name() .. ".json" .. (dbf.err and (" - save failed: " .. dbf.err) or "")},
-    {id = "lg5", type = "text", size = TXT.small, text = kill_diag and ("Last kill message: \"" .. kill_diag.txt .. "\" (handled "
-      .. string.format("%.1f", math.max(0, kill_diag.lag)) .. " s after it arrived)") or "No kill message seen yet this session."}}
+    {id = "lg3", type = "text", size = TXT.small, text = "Task database: Profiles/kt_tracker/Library/Database/" .. db_file_name() .. ".json" .. (dbf.err and (" - save failed: " .. dbf.err) or "")}}
 
   if log[2].text == "" then table.remove(log, 2) end
   local colsel = function(key, text) return {id = "opt|" .. key, type = "select", size = TXT.body, text = text, value = opt(key), options = COLORS} end
