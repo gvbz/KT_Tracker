@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.17.0
+
+- Removed the chat log (the "Log NPC and kill-task chat" option). Logs saved by earlier versions are not deleted: you can remove the `Profiles/kt_tracker/Library/Logs` folder yourself.
+- Updated the description at the top of `main.lua`.
+
 ## 4.16.0 (2026-10-21)
 
 First public release.

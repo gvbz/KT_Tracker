@@ -1,24 +1,32 @@
--- KT_Tracker 4.15.2: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.0: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- Needs client build 126 or newer (local notices, one-line labels).
 --
--- Window: "Show in NAV" at the top (arrows over task monsters and the NAV
--- arrow to the closest one), the area selector below it. The tracker runs
--- whenever it is enabled. Pick an area (Active, a hunting area, one of your own areas, or
--- Other) to see its kill tasks. Each line is the monster and your count; open
--- it for the quest giver, location, quest flags, and Select / Show in chat /
--- Edit (change that task in place). Counts are whole numbers. Manage holds:
+-- Window (title and icon from plugin.json "presentation"; no Start/Stop,
+-- status line or settings section): "Show in NAV" at the top (arrows over task
+-- monsters and the NAV arrow to the closest one), then the area selector
+-- (Active, a hunting area, one of your own areas, or Other). Each task is a
+-- collapsible line: name and count, coloured by state (white in progress,
+-- green ready to turn in, yellow available, red on cooldown with the time
+-- left). Opened, it shows the progress bar and Select / Chat / Edit:
+--   Select  the nearest task monster, or the quest giver; looked up when clicked
+--   Chat    the task's details (giver, location, kills, quest flags) as local
+--           notices in chat (notice service: only you see them, nothing sent)
+--   Edit    the task's fields in place, saved to the task database
+-- Manage holds:
 --   Detected  kill tasks found in your quest list or chat whose monster or quest
---             giver is unknown, with boxes to fill them in
+--             giver is unknown, with boxes to fill them in, or Remove
 --   Add       a new task, and areas of your own (removing one moves its tasks
 --             to Other); saved in the task database for this server
---   Quest log when the quest list was read/saved, the last kill message and how
---             quickly it was handled, and chat diagnostics
+--   Quest log when the quest list was read and saved, and the last kill message
 --   Options
+-- Every label is one line (wrap=false); long text is clipped and its full text
+-- is the tooltip. Text sizes: TXT.body 13, TXT.small 11.
 --
--- Window updates: the client rebuilds the whole window (and closes an open
--- dropdown) whenever anything in it changes, so the window only shows what
--- really changed: no chat counters, no distances or live object ids, a fixed
--- task order (state, then name), Select buttons that look up their target when
--- clicked, and nearby-NPC lists captured on request (Edit, Find nearby NPCs).
+-- Window updates: the client keeps controls by id and type and updates them in
+-- place, but the window is only rebuilt when something shown changes: no
+-- distances or live object ids, a fixed task order (state, then name), Select
+-- buttons that look up their target when clicked, and nearby-NPC lists read
+-- only when "Refresh list" is picked.
 --
 -- Chat: the client runs this every 0.5 s and hands over new chat each time.
 -- Kill counts, rewards and stamps are handled as soon as they arrive; only
@@ -41,6 +49,7 @@
 --      If that NPC isn't a known giver and only one finished task has no
 --      giver, it is learned as that task's giver (never for shared names).
 --   ("You've earned N experience." also follows monster kills, hence the checks.)
+-- Players' chat and tells are never trusted as progress.
 --
 -- Sources of truth:
 --   1. Quest-giver and server chat:
@@ -50,18 +59,19 @@
 --        You have killed 20 <Plural>! Your task is complete!                         -> ready to turn in
 --        You've earned 123,456 experience.                                           -> turned in (cooldown starts)
 --        You may complete this quest again in 19h 59m 3s.                            -> cooldown
---   2. Your quest list (@myquests), read after login and on the
---      automatic interval (default 4 minutes). The server allows one read per
---      60 s, so reads closer together wait. ACE only runs chat commands that start with "@", so the
---      tracker sends "@myquests" through the chat service (the client's command
---      bridge sends "/myquests" as speech, which the server ignores).
+--   2. Your quest list (@myquests), read 8 s after login and then every
+--      "/myquests update interval" (default 65 s; Options can turn it off). The
+--      server allows one read per 60 s, so reads closer together wait. ACE only
+--      runs chat commands that start with "@", so the tracker sends "@myquests"
+--      through the chat service (a "/" command would reach the server as speech).
 --      The tracker's own reads are hidden from the chat windows for 60 s
 --      (chat_filter permission); the lines still reach the tracker.
 --
 -- Storage (Saved/ClientPlugins/Profiles/kt_tracker/Library/), per server:
 --   Quests/<server>_<character>_<id>.json           the whole quest list; read at
 --                                                    start as the basis, rewritten
---                                                    after every read
+--                                                    after every read (other
+--                                                    plugins can read it)
 --   Quests/<server>_<character>_<id>_lastread.json  raw copy of the last reply
 --                                                    (for checking the format)
 --   Database/KillTaskDB_<server>.json                task details for that server
@@ -73,12 +83,7 @@
 --
 -- Catalog: kill-task quests from Oracle of Dereth's quests.csv (quest names,
 -- givers, towns, coordinates, kill counts, quest flags) name quest flags and
--- mark known quest givers.
---
--- Window title and plugin-bar icon come from plugin.json "presentation"
--- (images/kt.png); the client shows the title in the window header, so the
--- window content starts with the area selector. The status line is left empty
--- (the client hides it).
+-- mark known quest givers. Built-in tasks (TASKS) come from Aunberean data.
 --
 -- Quest-giver "!" markers come from the client's lightweight nearby-object list
 -- (snapshot.objects, nearest first, within the scan range): any non-monster,
@@ -89,13 +94,14 @@
 -- A shared name never teaches a weenie class; a giver telling you its task's
 -- progress does. Catalog quests that aren't kill tasks (e.g. The Crystal Idol of
 -- the A'nekshay, Bemeth the Gatherer) are tracked but never mark their NPCs.
--- Detected and Tasks offer a "pick a nearby NPC" list (within 30 m) so givers
--- are entered exactly as the game spells them.
+-- Edit, Detected and Add offer a "pick a nearby NPC" list (within 30 m, read
+-- when "Refresh list" is picked) so givers are entered exactly as the game
+-- spells them.
 --
 -- NAV arrow: re-aimed when the closest task monster changes, or when it has
 -- moved over 10 m (at most every 3 s). Each re-aim saves the Waypoint profile,
--- so it isn't re-aimed every callback. (Since the 2026-10-13 client the arrow no
--- longer writes "Waypoint: <coords>" above plugin windows.)
+-- so it isn't re-aimed every callback. With no task monster near, it points to
+-- a quest giver whose task is ready to turn in.
 --
 -- Quest-giver "!" colours (configurable): yellow available, white in progress
 -- (the client has no orange), green ready to turn in, red on cooldown.
@@ -364,7 +370,7 @@ local MYQ_HIDE = 60     -- seconds our quest-list reply is hidden from chat
 local NAV_MOVE_M, NAV_MIN_S = 10, 3  -- re-aim NAV when the target moved this far, at most this often
 local KILL_WORDS = {"killtask", "killcount", "slayerquest", "kills", "cull"}
 local DEFAULT_OPT = {
-  view = "Active", show_nav = true, npc_marks = true, auto_myq = true, myq_s = 65, chat_log = true,
+  view = "Active", show_nav = true, npc_marks = true, auto_myq = true, myq_s = 65,
   range = 150, cooldown_hours = 20,
   col_available = "yellow", col_progress = "white", col_turnin = "green", col_cooldown = "red",
 }
@@ -680,41 +686,7 @@ end
 local started_at, unix_now, tick_now = nil, nil, 0
 local last_action_serial = nil
 local last_note = ""
--- Chat log for testing (Options): NPC chat (tells, says, emotes from nearby
--- non-player objects), kill-task system lines, system lines while an NPC is
--- selected or within 5 s of using one, uses and NPC selections, and KT's own
--- notes. Never players' chat and never quest-list lines (a summary note only).
--- Saved to Library/Logs/ChatLog_<server>_<character>_<UTC start>_<part>.json,
--- at most every 30 s while lines arrive; a new part every 600 lines.
--- (Fields, not locals: the main chunk is near Lua's 200-local limit.)
-local chatlog = {lines = {}, part = 1, dirty = false, saved_at = -1e9, stamp = nil, name = nil, err = nil,
-  GROUP = "Logs", PART = 600, EVERY = 30,   -- 600 lines x 315 bytes stays well under the 256 KiB save limit
-  use_at = -1e9, sel = nil}
-function chatlog.clock(u)
-  u = math.floor(u or 0)
-  return string.format("%02d:%02d:%02d", (u // 3600) % 24, (u // 60) % 60, u % 60)
-end
-function chatlog.stamp_of(u)   -- YYYYMMDD_HHMM (UTC)
-  u = math.floor(u or 0)
-  local z = u // 86400 + 719468
-  local era = z // 146097
-  local doe = z - era * 146097
-  local yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
-  local y = yoe + era * 400
-  local doy = doe - (365 * yoe + yoe // 4 - yoe // 100)
-  local mp = (5 * doy + 2) // 153
-  local d = doy - (153 * mp + 2) // 5 + 1
-  local m = mp < 10 and mp + 3 or mp - 9
-  if m <= 2 then y = y + 1 end
-  return string.format("%04d%02d%02d_%02d%02d", y, m, d, (u // 3600) % 24, (u // 60) % 60)
-end
-local function log_chat(kind, text)
-  if not st or st.opt.chat_log == false or not unix_now then return end
-  chatlog.stamp = chatlog.stamp or chatlog.stamp_of(unix_now)
-  chatlog.lines[#chatlog.lines + 1] = chatlog.clock(unix_now) .. "Z [" .. kind .. "] " .. string.sub(text or "", 1, 300)
-  chatlog.dirty = true
-end
-local function note(t) last_note = string.sub(t, 1, 240); log_chat("kt", last_note) end
+local function note(t) last_note = string.sub(t, 1, 240) end
 -- Queue of chat lines still to process: entries chat_queue[queue_head .. queue_tail].
 -- (Explicit indexes: the # operator is unreliable once the front has been cleared.)
 local chat_queue, queue_head, queue_tail = {}, 1, 0
@@ -1345,7 +1317,6 @@ local function read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
           local used = use_npc
           if tonumber(e.time) and tonumber(e.time) < tick_now - 0.4 then used = used_at(tonumber(e.time)) end
           local item = {txt = txt, sender = "", ctx = (not hist) and ctx_npc or nil, use = (not hist) and used or nil, calm = calm, hist = hist}
-          if not hist and not contains(txt, " solves (") then log_chat("sys", txt) end
           -- Quest-list lines can come in hundreds and wait their turn; everything
           -- else (kill counts, rewards, stamps) is handled the moment it arrives.
           if contains(txt, " solves (") then enqueue(item)
@@ -1353,8 +1324,6 @@ local function read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
             process_line(item, objects_near)
             if not hist and (contains(txt, "You have killed ") or contains(txt, "ve killed ")) then kill_diag = {txt = string.sub(txt, 1, 120), lag = tick_now - (tonumber(e.time) or tick_now)} end
           end
-        elseif not hist and (use_npc or tick_now - chatlog.use_at <= 5) then
-          log_chat("sys", txt)   -- other system lines around an NPC you are dealing with
         end
       elseif type(e.sender) == "string" and not hist then
         -- Only trust tells from a nearby non-player object (an NPC), never players.
@@ -1367,8 +1336,6 @@ local function read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
           npc_told[o.id] = tick_now
         end
         if o then
-          log_chat("npc", o.name .. " (wcid " .. math.floor(tonumber(o.wcid) or 0) .. ", " .. math.floor(tonumber(o.distance) or 0) .. " m"
-            .. (use_npc and use_npc.id == o.id and ", selected" or "") .. ", type " .. math.floor(tonumber(e.color) or 0) .. "): " .. (e.text or txt))
           local r = recent_tells[o.id]
           if not r or tick_now - r.at > 3 then r = {at = tick_now, lines = {}}; recent_tells[o.id] = r end
           r.at = tick_now
@@ -1599,8 +1566,7 @@ local function handle_results(s)
     if e.type == "result" and type(e.id) == "string" then
       if not retry_if_limited(e) then
         local id = e.id
-        if id == "log_save" then chatlog.err = (not e.ok) and tostring(e.error or "save failed") or nil
-        elseif id == "db_read" then
+        if id == "db_read" then
           if e.ok and type(e.data) == "table" then merge_db(e.data.kt_db); need_rebuild = true; dbf.phase = "ready"
           else
             -- First time on this server: take generic details (goals, giver IDs) from the
@@ -2112,9 +2078,6 @@ local function build(s, scan)
     {id = "lg2", type = "text", size = TXT.small, text = "Quest file: " .. (qfile.name and ("Profiles/kt_tracker/Library/Quests/" .. qfile.name .. ".json") or "waiting for character")
       .. (qfile.err and (" - save failed: " .. qfile.err) or "")},
     {id = "lg3", type = "text", size = TXT.small, text = "Task database: Profiles/kt_tracker/Library/Database/" .. db_file_name() .. ".json" .. (dbf.err and (" - save failed: " .. dbf.err) or "")},
-    {id = "lg6", type = "text", size = TXT.small, text = (st.opt.chat_log == false) and "Chat log: off (Options)"
-      or ("Chat log: " .. (chatlog.name and ("Profiles/kt_tracker/Library/Logs/" .. chatlog.name .. ".json") or "starts with the first NPC or kill-task line")
-      .. (chatlog.err and (" - save failed: " .. chatlog.err) or ""))},
     {id = "lg5", type = "text", size = TXT.small, text = kill_diag and ("Last kill message: \"" .. kill_diag.txt .. "\" (handled "
       .. string.format("%.1f", math.max(0, kill_diag.lag)) .. " s after it arrived)") or "No kill message seen yet this session."}}
 
@@ -2123,8 +2086,6 @@ local function build(s, scan)
   local options = {
     {id = "opt|npc_marks", type = "checkbox", size = TXT.body, text = "NPC indication !", value = opt("npc_marks"), tooltip = "! over quest givers, coloured by task state"},
     {id = "opt|auto_myq", type = "checkbox", size = TXT.body, text = "Automatic /myquests update", value = opt("auto_myq") ~= false},
-    {id = "opt|chat_log", type = "checkbox", size = TXT.body, text = "Log NPC and kill-task chat (for testing)", value = opt("chat_log"),
-      tooltip = "Saved to Profiles/kt_tracker/Library/Logs, one file per session"},
     {id = "opt|myq_s", type = "number", size = TXT.body, text = "/myquests update interval", min = 1, max = 300, step = 1, value = tonumber(opt("myq_s")) or 65,
       tooltip = "Seconds (1-300). The server answers one /myquests per minute.", enabled = opt("auto_myq") ~= false},
     {id = "opt|range", type = "slider", size = TXT.body, text = "Scan range (m)", min = 20, max = 240, step = 10, value = tonumber(opt("range")) or 150},
@@ -2220,6 +2181,7 @@ return function(s, p)
     -- 4.15: "Show in NAV" replaces the NAV-arrow and monster-arrow options; no Start/Stop.
     if st.opt.show_nav == nil and st.opt.nav == false and st.opt.arrows == false then st.opt.show_nav = false end
     st.opt.nav, st.opt.arrows, st.opt.paused = nil, nil, nil
+    st.opt.chat_log = nil   -- 4.17: chat log removed
     st.opt.refresh_min, st.opt.login_refresh, st.opt.v47 = nil, nil, nil
     db = type(saved.db) == "table" and saved.db or {tasks = {}}
     refresh_areas()
@@ -2269,18 +2231,6 @@ return function(s, p)
   end
   -- The NPC you just used: selected, not a monster or player, within reach.
   local use_npc = ctx_npc and ctx_npc.id == s.selected and (tonumber(ctx_npc.distance) or 1e9) <= 6 and ctx_npc or nil
-  -- Chat log: selecting a non-monster object nearby
-  if s.selected ~= chatlog.sel then
-    chatlog.sel = s.selected
-    for _, o in ipairs(s.objects or {}) do
-      if o.id == s.selected then
-        if not o.monster and not o.player and not o.corpse and type(o.name) == "string" then
-          log_chat("select", o.name .. " (wcid " .. math.floor(tonumber(o.wcid) or 0) .. ", " .. math.floor(tonumber(o.distance) or 0) .. " m)")
-        end
-        break
-      end
-    end
-  end
   -- A finished action (UseDone) with that NPC selected: you used it.
   local aser = tonumber(s.action_serial)
   if aser then
@@ -2289,8 +2239,6 @@ return function(s, p)
       if next(npc_used) and #used_ids > 200 then npc_used, used_ids = {}, {} end
       if not npc_used[use_npc.id] then used_ids[#used_ids + 1] = use_npc.id end
       npc_used[use_npc.id] = tick_now
-      chatlog.use_at = tick_now
-      log_chat("use", use_npc.name .. " (wcid " .. math.floor(tonumber(use_npc.wcid) or 0) .. ", " .. math.floor(tonumber(use_npc.distance) or 0) .. " m)")
       begin_pickup(use_npc)
       local pr = pending_reward
       if pr and pr.npc.id == use_npc.id and tick_now - pr.at <= 10 then on_turn_in(pr.npc, false, true) end
@@ -2326,16 +2274,6 @@ return function(s, p)
     end
   end
   file_services(s, now)
-  -- Chat log: save the current part at most every 30 s while lines arrive.
-  if chatlog.dirty and my_server and my_name and chatlog.stamp
-     and (now - chatlog.saved_at >= chatlog.EVERY or #chatlog.lines >= chatlog.PART) then
-    chatlog.name = "ChatLog_" .. string.sub(safe_name(my_server), 1, 16) .. "_" .. string.sub(safe_name(my_name), 1, 30)
-      .. "_" .. chatlog.stamp .. "_" .. chatlog.part
-    request({id = "log_save", service = "profiles", operation = "save", group = chatlog.GROUP, name = chatlog.name,
-      data = {kt_chatlog = true, server = my_server, character = my_name, started_utc = chatlog.stamp, part = chatlog.part, lines = chatlog.lines}})
-    chatlog.dirty, chatlog.saved_at = false, now
-    if #chatlog.lines >= chatlog.PART then chatlog.lines, chatlog.part = {}, chatlog.part + 1 end
-  end
 
   -- Automatic quest-list reads: after login, then on the chosen interval.
   if not mq.login_done and now - started_at > 8 then

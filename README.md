@@ -63,7 +63,6 @@ Open **Manage** at the bottom of the window:
   - scan range
   - default cooldown
   - the ! colours
-  - a chat log for testing
 
 Long text in the window stays on one line. Hover over it to read all of it.
 
@@ -89,7 +88,6 @@ Saved under `Saved/ClientPlugins/Profiles/kt_tracker/Library/`:
 
 - `Quests/`: your quest list, one file per character and server. Other plugins can read it.
 - `Database/`: tasks you added or edited, shared by your characters on that server.
-- `Logs/`: the optional chat log.
 
 ## Credits
 
