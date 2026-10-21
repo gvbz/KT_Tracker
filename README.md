@@ -18,11 +18,12 @@ A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest sta
   - Red = On cool-down
   - Green = Ready to turn in
 - Compares /myquests against a base set of known kill task quests.
+- Built-in tasks cover Hoshino, Tou-Tou, Rynthid, Graveyard, Viridian Rise, Frozen Valley and Neftet. Other kill tasks are picked up from your quest list and chat.
 
 ## Requirements
 
 - AC:Unreal client build 126 (2026.10.19) or newer.
-- Works on any ACE server. Built-in tasks cover Hoshino, Tou-Tou, Rynthid, Graveyard, Viridian Rise, Frozen Valley and Neftet. Other kill tasks are picked up from your quest list and chat.
+- Works on any ACE server.
 
 ## Install
 
