@@ -1,4 +1,4 @@
--- KT_Tracker 4.17.0: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.1: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
 -- Window (title and icon from plugin.json "presentation"; no Start/Stop,
@@ -2070,14 +2070,14 @@ local function build(s, scan)
   if log[2].text == "" then table.remove(log, 2) end
   local colsel = function(key, text) return {id = "opt|" .. key, type = "select", size = TXT.body, text = text, value = opt(key), options = COLORS} end
   local options = {
-    {id = "opt|npc_marks", type = "checkbox", size = TXT.body, text = "NPC indication !", value = opt("npc_marks"), tooltip = "! over quest givers, coloured by task state"},
+    {id = "opt|npc_marks", type = "checkbox", size = TXT.body, text = "NPC indication !", value = opt("npc_marks"), tooltip = "! over quest givers, colored by task state"},
     {id = "opt|auto_myq", type = "checkbox", size = TXT.body, text = "Automatic /myquests update", value = opt("auto_myq") ~= false},
     {id = "opt|myq_s", type = "number", size = TXT.body, text = "/myquests update interval", min = 1, max = 300, step = 1, value = tonumber(opt("myq_s")) or 65,
       tooltip = "Seconds (1-300). The server answers one /myquests per minute.", enabled = opt("auto_myq") ~= false},
     {id = "opt|range", type = "slider", size = TXT.body, text = "Scan range (m)", min = 20, max = 240, step = 10, value = tonumber(opt("range")) or 150},
     {id = "opt|cooldown_hours", type = "number", size = TXT.body, text = "Default cooldown after turn-in (hours)", min = 0, max = 168, step = 1, value = tonumber(opt("cooldown_hours")) or 20},
-    colsel("col_available", "! colour: available"), colsel("col_progress", "! colour: in progress"),
-    colsel("col_turnin", "! colour: ready to turn in"), colsel("col_cooldown", "! colour: on cooldown")}
+    colsel("col_available", "! color: available"), colsel("col_progress", "! color: in progress"),
+    colsel("col_turnin", "! color: ready to turn in"), colsel("col_cooldown", "! color: on cooldown")}
   ui[#ui + 1] = {id = "manage", type = "section", size = TXT.body, text = "Manage", expanded = false, children = {
     {id = "mtabs", type = "tabs", children = {
       {id = "m_found", type = "column", text = "Detected" .. ((#dkeys > 0) and (" (" .. #dkeys .. ")") or ""), children = detected},
