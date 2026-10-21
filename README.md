@@ -1,8 +1,18 @@
 # Kill Task Tracker (KT_Tracker)
 
-A kill-task tracker plugin for the AC:Unreal client. It keeps track of your kill tasks: how many kills you have, which tasks are ready to turn in, and which are on cooldown. It also marks quest givers and task monsters around you.
+A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest status' from a /myquests dump and then displays relevant kill task information. The plugin runs whenever it is enabled and there are no specific start/stop buttons.
 
-It runs whenever it is enabled. There is nothing to start or stop.
+## Features
+
+-Displays kill task mobs on the minimap with a green triangle.
+-Automatically points the navigation arrow to the closest mob.
+-Automatically detects and adds custom quests, with the ability to edit quest information and categorize them by area.
+-NPC indication symbols (!) based on quest status. Adjustable in the settings menu.
+  -Yellow = Available
+  -White = In progress
+  -Red = On cool-down
+  -Green = Ready to turn in
+-Compares /myquests against a base set of known kill tasks quests. 
 
 ## Requirements
 
@@ -12,21 +22,20 @@ It runs whenever it is enabled. There is nothing to start or stop.
 ## Install
 
 1. Download the latest zip from the [Releases](../../releases) page.
-2. In the client, open **Manage Plugins** (Plugins on the login screen, or Game Play → Manage Plugins).
-3. Press **Open plugin folder** and copy the `KT_Tracker` folder into it. The path should end in `Installed\KT_Tracker\plugin.json`, not `KT_Tracker\KT_Tracker\...`.
-4. Press **Refresh**, then **Enable** Kill Task Tracker.
+2. Unzip and drop into `ACUnreal\Saved\ClientPlugins\Installed\KT_Tracker`.
+4. Open the plugin menu, press **Refresh**, then **Enable** the Kill Task Tracker.
 
-## Update
+## Updating
 
-Replace the files in `Installed\KT_Tracker` with the new ones and press **Refresh** in Manage Plugins. Your tasks, progress and settings are saved outside this folder, so they are kept.
+Replace the files in `Installed\KT_Tracker` with the new download and press **Refresh** in Manage Plugins. Your tasks, progress and settings are saved outside this folder, so they are retained.
 
 ## In game
 
 ### The window
 
-- **Show in NAV**: turns the arrows over task monsters and the NAV arrow on or off.
-- **Area list**: pick **Active** (tasks you are working on or can turn in), a hunting area, one of your own areas, or **Other**.
-- **Task lines**: one line per task, showing the task name and your kill count. The colour shows the state:
+- **Show in NAV**: turns the green arrows over task monsters and NAV arrow integration on or off.
+- **Area list**: pick **Active** (tasks you are working on or can turn in), a specific hunting area, or **Other**. Newly detected quests that are categorized will be placed into **Other**.
+- **Task lines**: one line per task, showing the task name and your kill count. The color shows the state:
   - white: in progress, with your count (e.g. `Devourer Marguls  6/15`)
   - green: ready to turn in
   - yellow: available to pick up
@@ -38,14 +47,14 @@ Replace the files in `Installed\KT_Tracker` with the new ones and press **Refres
 
 ### In the world
 
-- **!** over quest givers, coloured by task state (colours can be changed in Options).
+- **!** over quest givers, colored by task state (colors can be changed in Options).
 - **Green arrows** over task monsters near you.
 - **NAV arrow** pointing to the closest task monster, or to a quest giver when a task is ready to turn in.
 
 ### How progress is tracked
 
-- **Your quest list.** The tracker reads `/myquests` automatically when you log in, and every 65 seconds after that. These reads are hidden from your chat windows.
-- **Kill messages.** Lines such as "You've killed 5 out of 20 ..." update the count straight away.
+- **Your quest list.** The tracker reads `/myquests` automatically when you log in, and every 65 seconds after that (adjustable in settings). These reads are hidden from your chat windows.
+- **Kill messages.** Lines such as "You've killed 5 out of 20 ..." update the count immediately without relying on another /myquests poll.
 - **Turn-ins.** These are confirmed by your quest flags, or by using the quest giver followed by the reward. The tracker never relies on what an NPC says, and never counts other players' chat or tells as progress.
 - **Your data.** Everything is saved per character and per server, so characters with the same name on different servers stay separate.
 
@@ -68,7 +77,7 @@ Long text in the window stays on one line. Hover over it to read all of it.
 
 ## Permissions
 
-When you enable it, the plugin asks for:
+The plugin uses the following service requests:
 
 | Permission | Used for |
 |---|---|
