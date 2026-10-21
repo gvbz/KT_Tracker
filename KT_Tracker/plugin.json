@@ -1,0 +1,28 @@
+{
+  "api": 2,
+  "mode": "companion",
+  "id": "kt_tracker",
+  "name": "Kill Task Tracker",
+  "short_name": "KT",
+  "version": "4.16.0",
+  "description": "Kill-task tracker: tasks by area with your progress, quest-giver markers by state, green arrows and an auto NAV arrow to the closest task monster, and your quest list saved per character and server.",
+  "presentation": {
+    "title": "Kill Task Tracker",
+    "icon": "kt.png",
+    "controls": "none",
+    "settings": false,
+    "status": false
+  },
+  "permissions": [
+    "chat",
+    "chat_filter",
+    "state",
+    "ui",
+    "markers",
+    "waypoint",
+    "profiles",
+    "say",
+    "data"
+  ],
+  "settings": []
+}
