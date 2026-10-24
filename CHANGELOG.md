@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.17.2
+
+- Quest-giver information now comes only from the NPC you have selected and used. Lines like "You may complete this quest again in..." are no longer credited to whatever stands nearby.
+- Pets and summons ("<player>'s ...") are never treated as NPCs, so they no longer get a "!".
+- Only kill-task givers get a "!". Cooldowns saved earlier for anything else (such as a pet) are removed automatically.
+
 ## 4.17.1
 
 - Options labels use US spelling: "! color: ...".

@@ -1,4 +1,4 @@
--- KT_Tracker 4.17.1: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.2: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
 -- Window (title and icon from plugin.json "presentation"; no Start/Stop,
@@ -28,6 +28,13 @@
 -- distances or live object ids, a fixed task order (state, then name), Select
 -- buttons that look up their target when clicked, and nearby-NPC lists read
 -- only when "Refresh list" is picked.
+--
+-- Which NPC a line is about: only the NPC you have selected (within 6 m) and
+-- use. "Destroy N of these..." and "You may complete this quest again in..."
+-- system lines count only when that NPC's use is confirmed (action_serial) within
+-- 3 s; nothing is ever credited to whatever happens to stand nearby. A giver's
+-- cooldown is kept only for known kill-task givers, and pets ("<player>'s ...")
+-- are never treated as NPCs. Task cooldowns otherwise come from /myquests.
 --
 -- Chat: the client runs this every 0.5 s and hands over new chat each time.
 -- Kill counts, rewards and stamps are handled as soon as they arrive; only
@@ -1004,10 +1011,32 @@ local function on_task_start(npc, wcid, plural, goal)
 end
 
 local function npc_cd_key(name, wcid) if wcid and wcid > 1 then return "w" .. wcid end; return norm(name) end
+-- Pets and lines waiting for their NPC's use (fields, not locals: the main chunk
+-- is near Lua's 200-local limit).
+local guard = {players = {}, pending = nil}
+-- "Gvbz's Mythic Dragon": a pet or summon of you or a nearby player, never an NPC.
+function guard.is_pet(name)
+  if type(name) ~= "string" then return false end
+  local m = regexmatch(name, "^(.+)'s ")
+  if not m then return false end
+  local owner = string.lower(m["1"])
+  return (my_name and owner == string.lower(my_name)) or guard.players[owner] == true
+end
+-- Keep saved giver cooldowns only for known kill-task givers (drops ones once
+-- credited to a pet or another nearby object).
+function guard.purge_cd()
+  for k in pairs(st.npc_cd) do
+    local keep
+    if string.sub(k, 1, 1) == "w" and tonumber(string.sub(k, 2)) then keep = NPC_BY_WCID[math.floor(tonumber(string.sub(k, 2)))] ~= nil
+    else keep = NPC_BY_NAME[k] ~= nil end
+    if not keep then st.npc_cd[k] = nil; dirty = true end
+  end
+end
 local function on_cooldown(npc, wcid, secs)
   if not unix_now then return end
-  st.npc_cd[npc_cd_key(npc, wcid)] = unix_now + secs
   local ids = npc_ids(npc, wcid)
+  if #ids == 0 then return end   -- not a kill-task giver
+  st.npc_cd[npc_cd_key(npc, wcid)] = unix_now + secs
   if #ids == 1 and not st.prog[ids[1]] then st.cd[ids[1]] = unix_now + secs end
   dirty = true
   note(npc .. ": available again in " .. dur(secs))
@@ -1016,6 +1045,13 @@ end
 local npc_told, npc_told_n = {}, 0  -- object id -> tick of its last tell to you
 local npc_used, used_ids = {}, {}  -- object id -> tick you last used it (action_serial); ids seen
 local has_action_serial = false     -- the snapshot reports action_serial
+-- Run fn(npc) once that selected NPC's use is confirmed: at once if it was used in
+-- the last 10 s, else when its use arrives within 3 s (else dropped).
+function guard.after_use(npc, fn)
+  local u = npc_used[npc.id]
+  if u and tick_now - u <= 10 then fn(npc)
+  else guard.pending = {npc = npc, fn = fn, at = tick_now} end
+end
 -- Pickup by use: using a giver that has an available task starts it. What the
 -- giver tells you in the next 2 s decides which task (its monster named in the
 -- tell, any wording), else its only available task. In-progress tasks are never
@@ -1239,13 +1275,13 @@ local function process_line(item, objects_near)
       kill_line(txt)
     elseif (contains(txt, "You've earned") or contains(txt, "You have earned")) and contains(txt, "experience") then
       on_turn_in(item.use, item.calm)
-    elseif item.ctx and contains(txt, "of these") and contains(txt, "Destroy") then
+    elseif item.use and contains(txt, "of these") and contains(txt, "Destroy") then
       local m = regexmatch(txt, START_RE)
-      if m then on_task_start(item.ctx.name, math.floor(item.ctx.wcid or 0), m["2"], tonumber(m["1"])) end
-    elseif item.ctx and contains(txt, "complete this quest again in") then
+      if m then guard.after_use(item.use, function(o) on_task_start(o.name, math.floor(o.wcid or 0), m["2"], tonumber(m["1"])) end) end
+    elseif item.use and contains(txt, "complete this quest again in") then
       local m = regexmatch(txt, AGAIN_RE)
       local secs = m and parse_duration(m["1"])
-      if secs then on_cooldown(item.ctx.name, math.floor(item.ctx.wcid or 0), secs) end
+      if secs then guard.after_use(item.use, function(o) on_cooldown(o.name, math.floor(o.wcid or 0), secs) end) end
     elseif contains(txt, "myquests\" is not currently enabled") then
       note("This server has /myquests disabled; tracking uses chat only")
     elseif contains(txt, "Quest list is empty") then
@@ -2180,6 +2216,9 @@ return function(s, p)
     rebuild_indexes()
   end
   if need_rebuild then rebuild_indexes(); need_rebuild = false end
+  -- Once this server's task database is loaded (its givers are indexed), drop
+  -- saved giver cooldowns that don't belong to a kill-task giver.
+  if not guard.purged and dbf.phase == "ready" then guard.purge_cd(); guard.purged = true end
 
   -- Nearby scan (objects arrive nearest first)
   local range = tonumber(opt("range")) or 150
@@ -2187,9 +2226,11 @@ return function(s, p)
   my_x, my_y = global_xy(s.position)
   local calm = true  -- no live monster within 30 m (an experience reward then isn't from a kill)
   local objects_near, npc_names, others = {}, {}, {}
+  guard.players = {}
+  for _, o in ipairs(s.objects or {}) do if o.player and type(o.name) == "string" then guard.players[string.lower(o.name)] = true end end
   for _, o in ipairs(s.objects or {}) do
     local d = tonumber(o.distance) or 1e9
-    if type(o.name) == "string" and not o.player then
+    if type(o.name) == "string" and not o.player and not guard.is_pet(o.name) then
       if o.monster then
         if not o.dead and d <= range then scan.monsters[#scan.monsters + 1] = o end
         if not o.dead and d <= 30 then calm = false end
@@ -2206,13 +2247,14 @@ return function(s, p)
   if type(s.server) == "string" and #s.server > 0 then my_server = s.server end
   handle_results(s)
   handle_events(s, now)
-  -- Speaker for quest text that arrives as a system message: the selected
-  -- non-monster object, else the closest one within 5 m.
+  -- Speaker for quest text that arrives as a system message: only the selected
+  -- non-monster object (never just whatever stands nearby, never a pet).
   local ctx_npc
   for _, o in ipairs(s.objects or {}) do
-    if not o.monster and not o.player and not o.corpse and type(o.name) == "string" then
-      if o.id == s.selected and (tonumber(o.distance) or 1e9) <= 15 then ctx_npc = o; break end
-      if not ctx_npc and (tonumber(o.distance) or 1e9) <= 5 then ctx_npc = o end
+    if o.id == s.selected then
+      if not o.monster and not o.player and not o.corpse and type(o.name) == "string"
+         and (tonumber(o.distance) or 1e9) <= 15 and not guard.is_pet(o.name) then ctx_npc = o end
+      break
     end
   end
   -- The NPC you just used: selected, not a monster or player, within reach.
@@ -2225,6 +2267,8 @@ return function(s, p)
       if next(npc_used) and #used_ids > 200 then npc_used, used_ids = {}, {} end
       if not npc_used[use_npc.id] then used_ids[#used_ids + 1] = use_npc.id end
       npc_used[use_npc.id] = tick_now
+      local pd = guard.pending
+      if pd and pd.npc.id == use_npc.id and tick_now - pd.at <= 3 then guard.pending = nil; pd.fn(use_npc) end
       begin_pickup(use_npc)
       local pr = pending_reward
       if pr and pr.npc.id == use_npc.id and tick_now - pr.at <= 10 then on_turn_in(pr.npc, false, true) end
@@ -2232,6 +2276,7 @@ return function(s, p)
     last_action_serial = aser
   end
   read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
+  if guard.pending and tick_now - guard.pending.at > 3 then guard.pending = nil end
   if pickup and tick_now - pickup.at >= 2 then resolve_pickup() end
   if next(recent_tells) then
     local old = {}
@@ -2245,7 +2290,7 @@ return function(s, p)
   -- giver learned this tick shows at once).
   for _, o in ipairs(others) do
     local ids = npc_ids(o.name, o.wcid)
-    if #ids > 0 or st.npc_cd[npc_cd_key(o.name, math.floor(tonumber(o.wcid) or 0))] or ((not shared(o.name)) and st.npc_cd[norm(o.name)]) then scan.npcs[#scan.npcs + 1] = o end
+    if #ids > 0 then scan.npcs[#scan.npcs + 1] = o end   -- only kill-task givers get a "!"
     -- Remember a giver's weenie class the first time it is seen by name, so its
     -- "!" still shows if the name is written differently somewhere else.
     local w = math.floor(tonumber(o.wcid) or 0)
