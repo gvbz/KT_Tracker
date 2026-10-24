@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.17.3
+
+- Quest givers that share a name, such as the five Royal Guards at Tou-Tou fort, are now learned from the one you select and use. When he names his task's monster (on pickup, or in a progress reply), or he is the only one with a task ready to turn in, his weenie class is saved to that task in the task database. From then on he gets the task's "!", and his pickups and turn-ins are recognized immediately.
+- NPC replies count only from the NPC you have selected, so another NPC with the same name can't be mistaken for him.
+
 ## 4.17.2
 
 - Quest-giver information now comes only from the NPC you have selected and used. Lines like "You may complete this quest again in..." are no longer credited to whatever stands nearby.

@@ -1,4 +1,4 @@
--- KT_Tracker 4.17.2: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.3: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
 -- Window (title and icon from plugin.json "presentation"; no Start/Stop,
@@ -35,6 +35,12 @@
 -- 3 s; nothing is ever credited to whatever happens to stand nearby. A giver's
 -- cooldown is kept only for known kill-task givers, and pets ("<player>'s ...")
 -- are never treated as NPCs. Task cooldowns otherwise come from /myquests.
+-- NPC tells count only from that selected NPC. Givers with a shared name (five
+-- "Royal Guard"s at Tou-Tou fort) are learned the same way: when the selected,
+-- used NPC names a task's monster (pickup reply, "Destroy N of these", a
+-- progress tell) or is the only one of that name with a task ready to turn in,
+-- its weenie class is saved to that task in the task database. Then that NPC,
+-- and only it, gets the task's "!" and its pickups and turn-ins.
 --
 -- Chat: the client runs this every 0.5 s and hands over new chat each time.
 -- Kill counts, rewards and stamps are handled as soon as they arrive; only
@@ -1059,12 +1065,27 @@ end
 -- read, no kills since) is undone by that read.
 local pickup = nil                  -- {npc, at, tells}
 local recent_tells = {}             -- object id -> {at, lines} (last few seconds)
+-- Tasks this NPC may give. A shared name ("Royal Guard") whose weenie class isn't
+-- linked yet offers every task with that giver name; the pickup then needs the
+-- NPC's reply to name the task's monster (broad = true).
 local function available_for(npc)
-  local out = {}
-  for _, id in ipairs(npc_ids(npc.name, math.floor(tonumber(npc.wcid) or 0))) do
+  local out, broad = {}, false
+  local ids = npc_ids(npc.name, math.floor(tonumber(npc.wcid) or 0))
+  if #ids == 0 and shared(npc.name) then ids = NPC_BY_NAME[norm(npc.name)] or {}; broad = true end
+  for _, id in ipairs(ids) do
     if status(id) == "available" then out[#out + 1] = id end
   end
-  return out
+  return out, broad
+end
+-- May this NPC's weenie class be linked to task id? Not when that weenie class
+-- already belongs to another task with the same giver name.
+function guard.can_link(id, npc)
+  local w = math.floor(tonumber(npc.wcid) or 0)
+  if w <= 1 then return false end
+  for _, x in ipairs(NPC_BY_WCID[w] or {}) do
+    if x ~= id and task(x) and norm(task(x).npc or "") == norm(npc.name) then return false end
+  end
+  return true
 end
 local function first_number(txt)
   local n
@@ -1085,7 +1106,7 @@ local function begin_pickup(npc)
 end
 local function resolve_pickup()
   local p = pickup; pickup = nil
-  local cands = available_for(p.npc)          -- a cooldown reply or a "Destroy N" start empties this
+  local cands, broad = available_for(p.npc)   -- a cooldown reply or a "Destroy N" start empties this
   if #cands == 0 then return end
   local pick, goal, best = nil, nil, 0
   for _, line in ipairs(p.tells) do
@@ -1096,8 +1117,13 @@ local function resolve_pickup()
       end
     end
   end
-  if not pick and #cands == 1 then pick = cands[1] end
+  if not pick and #cands == 1 and not broad then pick = cands[1] end
   if not pick then return end
+  -- A shared-name giver named this task's monster: remember its weenie class.
+  if broad then
+    if not guard.can_link(pick, p.npc) then return end
+    link_npc(pick, p.npc.name, math.floor(tonumber(p.npc.wcid) or 0))
+  end
   local t = task(pick)
   goal = goal or int(t.goal)
   st.prog[pick] = {n = 0, g = goal, done = false, at = unix_now, prov = true}
@@ -1136,6 +1162,15 @@ local function on_turn_in(use_npc, calm, forced)
   if not pick and #known == 0 and not shared(use_npc.name) then
     if #no_giver == 1 then pick = no_giver[1] elseif #cands == 1 then pick = cands[1] end
     if pick then link_npc(pick, use_npc.name, wcid) end
+  end
+  -- A shared-name giver not linked yet: the only task with that giver name that
+  -- is ready to turn in is its task; remember its weenie class.
+  if not pick and #known == 0 and shared(use_npc.name) then
+    local mine = {}
+    for _, id in ipairs(NPC_BY_NAME[norm(use_npc.name)] or {}) do
+      for _, c in ipairs(cands) do if c == id then mine[#mine + 1] = id end end
+    end
+    if #mine == 1 and guard.can_link(mine[1], use_npc) then pick = mine[1]; link_npc(pick, use_npc.name, wcid) end
   end
   if not pick then return end
   local t = task(pick)
@@ -1358,9 +1393,9 @@ local function read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
         end
       elseif type(e.sender) == "string" and not hist then
         -- Only trust tells from a nearby non-player object (an NPC), never players.
-        local o = npc_names[string.lower(e.sender)]
-        -- Several NPCs can share a name: the one you have selected is the speaker.
-        if use_npc and string.lower(use_npc.name) == string.lower(e.sender) then o = use_npc end
+        -- Only the NPC you have selected (and are using) is the speaker; a tell
+        -- from any other NPC is ignored, so a shared name can't mislead.
+        local o = (use_npc and string.lower(use_npc.name) == string.lower(e.sender)) and use_npc or nil
         if o then
           if npc_told_n > 200 then npc_told, npc_told_n = {}, 0 end
           if not npc_told[o.id] then npc_told_n = npc_told_n + 1 end
