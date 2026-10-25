@@ -1,4 +1,4 @@
--- KT_Tracker 4.17.8: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.9: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
 -- 4.17.4 (client build 135): plugin.json lists only the snapshot fields used
@@ -2034,19 +2034,18 @@ end
 local function uid(prefix, key) return prefix .. string.sub(key, 1, 64 - #prefix) end
 local function ago(sec) if sec < 60 then return "just now" end; return dur(sec) .. " ago" end
 
-local function build(s, scan)
-  local ui, markers = {}, {}
-  EDIT_IDS, AREA_IDS, SEL_IDS, SEL_TARGET = {}, {}, {}, {}
-  local view = opt("view")
-
-  -- Status, name and area of every task once (sorting must not call task()).
-  local info = {}
-  for _, id in ipairs(all_ids()) do
-    local stt, p, left = status(id)
-    local t = task(id)
-    info[id] = {status = stt, p = p, left = left, name = display(t), area = area_of(t)}
+-- Markers, the NAV target and the Select buttons' targets: every callback,
+-- from the nearby objects. Only the tasks of nearby givers and monsters are
+-- looked at (each once), so this stays cheap and always current.
+function guard.marks(scan)
+  local markers = {}
+  SEL_TARGET = {}
+  local memo = {}
+  local function st_of(id)
+    local m = memo[id]
+    if m == nil then m = status(id) or false; memo[id] = m end
+    return m or nil
   end
-
   -- Quest-giver "!": turn in > in progress > available > cooldown
   local RANK = {turnin = 4, active = 3, available = 2, cooldown = 1}
   local COLOR = {turnin = opt("col_turnin"), active = opt("col_progress"), available = opt("col_available"), cooldown = opt("col_cooldown")}
@@ -2055,7 +2054,7 @@ local function build(s, scan)
     local best
     for _, id in ipairs(npc_ids(o.name, o.wcid)) do
       giver_obj[id] = giver_obj[id] or o
-      local stt = (info[id] and info[id].status) or status(id)
+      local stt = st_of(id)
       if stt and (not best or RANK[stt] > RANK[best]) then best = stt end
     end
     local cd = st.npc_cd[npc_cd_key(o.name, math.floor(tonumber(o.wcid) or 0))] or ((not shared(o.name)) and st.npc_cd[norm(o.name)])
@@ -2072,8 +2071,8 @@ local function build(s, scan)
     local lname = string.lower(o.name)
     local id = MOB[lname]
     local l = MOB[0] and MOB[0][lname]
-    if l and #l > 1 then for _, x in ipairs(l) do if info[x] and info[x].status == "active" then id = x; break end end end
-    if id and info[id] and info[id].status == "active" then
+    if l and #l > 1 then for _, x in ipairs(l) do if st_of(x) == "active" then id = x; break end end end
+    if id and st_of(id) == "active" then
       near[id] = near[id] or o
       nav_target = nav_target or o
       if opt("show_nav") and #markers < 32 then markers[#markers + 1] = {id = o.id, shape = "arrow", color = "green"} end
@@ -2082,6 +2081,31 @@ local function build(s, scan)
   -- Nothing to hunt nearby: point at a quest giver waiting for a turn-in.
   if not nav_target then
     for _, o in ipairs(scan.npcs) do if npc_state[o.id] == "turnin" then nav_target = o; break end end
+  end
+  -- Select: the nearest monster of a task in progress, else its quest giver.
+  for id, o in pairs(giver_obj) do SEL_TARGET[id] = o.id end
+  for id, o in pairs(near) do SEL_TARGET[id] = o.id end
+  return markers, nav_target
+end
+
+-- One text key per marker list, so markers are sent only when they change.
+function guard.marker_key(markers)
+  local k = {}
+  for i, m in ipairs(markers) do k[i] = m.id .. m.shape .. tostring(m.color) end
+  return table.concat(k, ",")
+end
+
+local function build(s)
+  local ui = {}
+  EDIT_IDS, AREA_IDS, SEL_IDS = {}, {}, {}
+  local view = opt("view")
+
+  -- Status, name and area of every task once (sorting must not call task()).
+  local info = {}
+  for _, id in ipairs(all_ids()) do
+    local stt, p, left = status(id)
+    local t = task(id)
+    info[id] = {status = stt, p = p, left = left, name = display(t), area = area_of(t)}
   end
 
   -- Top: Show in NAV, then the area selector
@@ -2154,8 +2178,6 @@ local function build(s, scan)
     -- Details (giver, location, flags) are under Chat, not in the window.
     -- Select: a fixed button; the nearest monster (or the giver) is looked up
     -- when clicked, so the window doesn't change as things move.
-    local target = (i.status == "active") and near[id] or giver_obj[id]
-    SEL_TARGET[id] = target and target.id or nil
     local sb = uid("sel|", id); SEL_IDS[sb] = id
     local buttons = {{id = sb, type = "button", size = TXT.body, text = "Select",
       tooltip = (i.status == "active") and "Select the nearest monster" or "Select the quest giver"}}
@@ -2285,7 +2307,7 @@ local function build(s, scan)
     end
   end
   one_line(ui)
-  return ui, markers, nav_target
+  return ui
 end
 
 ---------------------------------------------------------------------------
@@ -2365,7 +2387,7 @@ return function(s, p)
     hist_serial = tonumber(s.chat_latest_serial)
     rebuild_indexes()
   end
-  if need_rebuild then rebuild_indexes(); need_rebuild = false end
+  if need_rebuild then rebuild_indexes(); need_rebuild = false; guard.reindexed = true end
   -- Once this server's task database is loaded (its givers are indexed), drop
   -- saved giver cooldowns that don't belong to a kill-task giver.
   if not guard.purged and dbf.phase == "ready" then guard.fix_fort_db(); guard.purge_cd(); guard.purged = true end
@@ -2476,8 +2498,23 @@ return function(s, p)
   elseif every and not mq.req_at and now - started_at > 8 then request_myquests("timer", now) end
 
   auto_link_descriptions(scan.monsters)
-  local ui, markers, nav_target = build(s, scan)
-  out.ui, out.markers, out.status = ui, markers, ""
+  -- 4.17.9: the window is rebuilt only when something it shows may have
+  -- changed: saved data or the task database changed, a click or file result
+  -- arrived, the quest-list read state, a note, an error, an edit, the minute
+  -- (cooldown times), and at least every 5 seconds as a safety net.
+  -- Markers are worked out every callback and sent only when they change.
+  local sig = table.concat({tostring(opt("view")), tostring(mq.active), last_note, tostring(s.error), tostring(edit_id),
+    tostring(qfile.name), tostring(qfile.saved), tostring(qfile.err), tostring(qfile.phase), tostring(dbf.err), tostring(dbf.phase),
+    tostring(mq.done_unix), tostring(mq.done_ok), tostring(mq.req_at), tostring(picker_names and #picker_names),
+    tostring(unix_now and math.floor(unix_now / 60))}, "|")
+  if dirty or guard.reindexed or next(s.events or {}) or sig ~= guard.ui_sig or not guard.ui_at or now - guard.ui_at >= 5 then
+    out.ui = build(s)
+    if not guard.ui_at then out.status = "" end
+    guard.ui_sig, guard.ui_at, guard.reindexed = sig, now, false
+  end
+  local markers, nav_target = guard.marks(scan)
+  local mkey = guard.marker_key(markers)
+  if mkey ~= guard.mkey then out.markers = markers; guard.mkey = mkey end
 
   if dirty and now - state_at >= 2 and workavailable() then
     out.state = compose_state()

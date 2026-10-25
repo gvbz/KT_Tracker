@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.17.9
+
+- Lighter: the window is rebuilt only when something in it may have changed (a kill, pickup, turn-in, quest-list read, click or setting, or the minute for cooldown times), and at least every 5 seconds. The "!" markers and arrows are still worked out every half second but sent only when they change. Kill counts, clicks and markers update as fast as before.
+
 ## 4.17.8
 
 - The five Royal Guards at Tou-Tou fort (Conquest) are built in: Void Knights, Hellfire Sorcerers, Pillars of Hellfire, Panumbris Shadows and Bushi Skeletons, each with its own guard, kill count and location. Every guard shows its "!" without having to be learned first.
