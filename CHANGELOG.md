@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.17.6
+
+- Runs every 0.5 seconds again. After a Refresh the client hands a plugin the chat since login, 128 lines at a time; at once a second, new kill messages waited behind that backlog.
+
 ## 4.17.5
 
 - One use of a quest giver can start several tasks. Gregoria and Hunter hand out three at once; each reply that names a task's monster now starts that task (before, only one started).

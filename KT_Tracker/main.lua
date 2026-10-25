@@ -1,12 +1,13 @@
--- KT_Tracker 4.17.5: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.6: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
--- 4.17.4 (client build 135): plugin.json asks for a callback every second
--- ("update_interval": 1) and lists only the snapshot fields used
+-- 4.17.4 (client build 135): plugin.json lists only the snapshot fields used
 -- ("snapshot_fields"), so the client no longer builds its full snapshot
 -- (inventory, spells, vendor data) for this plugin. Character name, action
--- serial and the selection details come without it. Older builds ignore both
--- settings and keep the full snapshot every 0.5 s.
+-- serial and the selection details come without it. Older builds ignore it.
+-- 4.17.6: callbacks every 0.5 s again ("update_interval": 0.5). The client
+-- hands a plugin at most 128 chat lines per callback and replays the login's
+-- chat after a Refresh, so at 1 s new kill lines waited behind that backlog.
 --
 -- Window (title and icon from plugin.json "presentation"; no Start/Stop,
 -- status line or settings section): "Show in NAV" at the top (arrows over task
