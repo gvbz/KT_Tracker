@@ -4,7 +4,7 @@
   "id": "kt_tracker",
   "name": "Kill Task Tracker",
   "short_name": "KT",
-  "version": "4.17.3",
+  "version": "4.17.5",
   "description": "Kill-task tracker: tasks by area with your progress, quest-giver markers by state, green arrows and an auto NAV arrow to the closest task monster, and your quest list saved per character and server.",
   "presentation": {
     "title": "Kill Task Tracker",
@@ -13,6 +13,9 @@
     "settings": false,
     "status": false
   },
+  "update_interval": 1,
+  "snapshot_fields": ["chat_events", "chat_latest_serial", "chat_pending", "chat_gap", "chat_dropped",
+    "objects", "selected", "position", "selection", "character_name", "action_serial", "action_error"],
   "permissions": [
     "chat",
     "chat_filter",

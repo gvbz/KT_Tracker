@@ -1,5 +1,12 @@
--- KT_Tracker 4.17.3: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.5: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
+--
+-- 4.17.4 (client build 135): plugin.json asks for a callback every second
+-- ("update_interval": 1) and lists only the snapshot fields used
+-- ("snapshot_fields"), so the client no longer builds its full snapshot
+-- (inventory, spells, vendor data) for this plugin. Character name, action
+-- serial and the selection details come without it. Older builds ignore both
+-- settings and keep the full snapshot every 0.5 s.
 --
 -- Window (title and icon from plugin.json "presentation"; no Start/Stop,
 -- status line or settings section): "Show in NAV" at the top (arrows over task
@@ -1104,31 +1111,54 @@ local function begin_pickup(npc)
   if r and tick_now - r.at <= 3 then for _, l in ipairs(r.lines) do tells[#tells + 1] = l end end
   pickup = {npc = npc, at = tick_now, tells = tells}
 end
+-- Irregular plurals a reply may use for a task's monster ("Gurog Henchmen" for
+-- "gurog henchman"); a regular plural already contains the singular.
+function guard.forms(m)
+  if string.sub(m, -3) == "man" then return {m, string.sub(m, 1, -4) .. "men"} end
+  if string.sub(m, -1) == "y" then return {m, string.sub(m, 1, -2) .. "ies"} end
+  if string.sub(m, -1) == "f" then return {m, string.sub(m, 1, -2) .. "ves"} end
+  return {m}
+end
+-- 4.17.5: one use can hand out several tasks (Gregoria and Hunter give three
+-- at once, one reply each). Every reply line starts the available task whose
+-- monster it names (the longest name wins, so "Snow Tusker Warriors" isn't
+-- read as "Snow Tuskers"); a giver with one available task and no naming
+-- reply starts that one.
 local function resolve_pickup()
   local p = pickup; pickup = nil
   local cands, broad = available_for(p.npc)   -- a cooldown reply or a "Destroy N" start empties this
   if #cands == 0 then return end
-  local pick, goal, best = nil, nil, 0
+  local picks, seen = {}, {}
   for _, line in ipairs(p.tells) do
     local low = string.lower(line)
+    local pick, best = nil, 0
     for _, id in ipairs(cands) do
       for _, m in ipairs(task(id).mobs or {}) do
-        if #m > best and string.contains(low, m) then pick, best, goal = id, #m, first_number(line) end
+        if #m > best then
+          for _, f in ipairs(guard.forms(m)) do
+            if string.contains(low, f) then pick, best = id, #m; break end
+          end
+        end
       end
     end
+    if pick and not seen[pick] then seen[pick] = true; picks[#picks + 1] = {id = pick, goal = first_number(line)} end
   end
-  if not pick and #cands == 1 and not broad then pick = cands[1] end
-  if not pick then return end
-  -- A shared-name giver named this task's monster: remember its weenie class.
-  if broad then
-    if not guard.can_link(pick, p.npc) then return end
-    link_npc(pick, p.npc.name, math.floor(tonumber(p.npc.wcid) or 0))
+  if #picks == 0 and #cands == 1 and not broad then picks[1] = {id = cands[1]} end
+  for _, k in ipairs(picks) do
+    -- A shared-name giver named this task's monster: remember its weenie class.
+    local ok = true
+    if broad then
+      ok = guard.can_link(k.id, p.npc)
+      if ok then link_npc(k.id, p.npc.name, math.floor(tonumber(p.npc.wcid) or 0)) end
+    end
+    if ok then
+      local t = task(k.id)
+      local goal = k.goal or int(t.goal)
+      st.prog[k.id] = {n = 0, g = goal, done = false, at = unix_now, prov = true}
+      st.cd[k.id] = nil; ids_cache = nil; dirty = true
+      note(display(t) .. ": started (" .. (goal or "?") .. " to kill)")
+    end
   end
-  local t = task(pick)
-  goal = goal or int(t.goal)
-  st.prog[pick] = {n = 0, g = goal, done = false, at = unix_now, prov = true}
-  st.cd[pick] = nil; ids_cache = nil; dirty = true
-  note(display(t) .. ": started (" .. (goal or "?") .. " to kill)")
 end
 local pending_reward = nil          -- {npc, at}: a reward waiting for its use (<= 10 s)
 local function on_turn_in(use_npc, calm, forced)
@@ -2277,19 +2307,28 @@ return function(s, p)
     end
   end
 
-  if type(s.char_strings) == "table" and type(s.char_strings["1"]) == "string" and #s.char_strings["1"] > 0 then my_name = s.char_strings["1"] end
+  if type(s.character_name) == "string" and #s.character_name > 0 then my_name = s.character_name
+  elseif type(s.char_strings) == "table" and type(s.char_strings["1"]) == "string" and #s.char_strings["1"] > 0 then my_name = s.char_strings["1"] end
   if tonumber(s.player) and tonumber(s.player) > 0 then my_player = math.floor(tonumber(s.player)) end
   if type(s.server) == "string" and #s.server > 0 then my_server = s.server end
   handle_results(s)
   handle_events(s, now)
   -- Speaker for quest text that arrives as a system message: only the selected
   -- non-monster object (never just whatever stands nearby, never a pet).
+  -- 4.17.4: the client's selection details (build 135) say what the object is;
+  -- only a creature or vendor can be a quest giver (chests, quest items and
+  -- portals send the same "You may complete this quest again" text).
   local ctx_npc
-  for _, o in ipairs(s.objects or {}) do
-    if o.id == s.selected then
-      if not o.monster and not o.player and not o.corpse and type(o.name) == "string"
-         and (tonumber(o.distance) or 1e9) <= 15 and not guard.is_pet(o.name) then ctx_npc = o end
-      break
+  local sel = s.selection
+  local npc_kind = type(sel) ~= "table" or sel.id ~= s.selected or sel.object_type == nil
+    or sel.object_type == "creature" or sel.object_type == "vendor"
+  if npc_kind and (tonumber(s.selected) or 0) ~= 0 then
+    for _, o in ipairs(s.objects or {}) do
+      if o.id == s.selected then
+        if not o.monster and not o.player and not o.corpse and type(o.name) == "string"
+           and (tonumber(o.distance) or 1e9) <= 15 and not guard.is_pet(o.name) then ctx_npc = o end
+        break
+      end
     end
   end
   -- The NPC you just used: selected, not a monster or player, within reach.

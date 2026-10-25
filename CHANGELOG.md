@@ -1,5 +1,15 @@
 # Changelog
 
+## 4.17.5
+
+- One use of a quest giver can start several tasks. Gregoria and Hunter hand out three at once; each reply that names a task's monster now starts that task (before, only one started).
+- Replies using irregular plurals, such as "Gurog Henchmen", are now recognized.
+
+## 4.17.4
+
+- Lighter on the client (build 135 or newer): the plugin runs once a second and asks only for the data it uses, so the client no longer builds its full snapshot (inventory, spells, vendor data) for it. Older builds ignore these settings.
+- Quest lines are credited only when the object you have selected is an NPC. Chests, quest items and portals send the same "You may complete this quest again in..." text and no longer give a quest giver a cooldown.
+
 ## 4.17.3
 
 - Quest givers that share a name, such as the five Royal Guards at Tou-Tou fort, are now learned from the one you select and use. When he names his task's monster (on pickup, or in a progress reply), or he is the only one with a task ready to turn in, his weenie class is saved to that task in the task database. From then on he gets the task's "!", and his pickups and turn-ins are recognized immediately.
