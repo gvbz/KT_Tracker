@@ -1,5 +1,12 @@
 # Changelog
 
+## 4.17.8
+
+- The five Royal Guards at Tou-Tou fort (Conquest) are built in: Void Knights, Hellfire Sorcerers, Pillars of Hellfire, Panumbris Shadows and Bushi Skeletons, each with its own guard, kill count and location. Every guard shows its "!" without having to be learned first.
+- Monster names with the plural on the first word, such as "Pillars of Hellfire", are now recognized in kill messages and quest-giver replies.
+- When two tasks share a monster (Panumbris Shadows at Tou-Tou outpost and at the fort), a kill message counts toward the task in progress whose kill goal matches.
+- A misspelled monster name ("Penumbris Shadow") saved in the task database is replaced by the built-in name.
+
 ## 4.17.7
 
 - Your quest list now overrules everything the tracker worked out from chat. After each `/myquests` read:

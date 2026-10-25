@@ -1,4 +1,4 @@
--- KT_Tracker 4.17.7: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.8: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
 -- 4.17.4 (client build 135): plugin.json lists only the snapshot fields used
@@ -161,9 +161,9 @@ local CATALOG = {
   {q="Ebon Gromnie Kill Task", f={"ebongromniekills","ebongromnietask"}, n={"Afra bint Abbas"}, m={"Ebon Gromnie","Ebon Gromnies"}, g=25, c="40.8N 83.0W", t="Redspire", r=true},
   {q="The Empyrean Portalspace Stabilizer", f={"killtaskapostatevirindihigh_0710","killtaskapostatevirindilow_0710","killtaskapostatevirindimid_0710"}, n={"Emissary of Asheron","Emissary"}, m={"Apostate Virindi Aggressors"}, g=30, c="69.6N 17.6E", t="Neydisa Castle", r=true},
   {q="Floeshark Kill Task", f={"floesharkkillcount","floesharkkilltask"}, n={"Ryuichi Tai"}, m={"Floeshark","Floesharks Isle of Ruin"}, g=50, c="90.3N 43.0W", t="Eastwatch", r=true},
-  {q="Fort Bushi Kill Task", f={"fortbushikillcount","fortbushikilltaskwait"}, m={"Fort Bushi"}, s="Conquest", r=true},
-  {q="Fort Knight Kill Task", f={"fortknightkillcount","fortknightkilltaskwait"}, m={"Fort Knight"}, s="Conquest", r=true},
-  {q="Fort Shadow Kill Task", f={"fortshadowkillcount","fortshadowkilltaskwait"}, m={"Fort Shadow"}, s="Conquest", r=true},
+  {q="Fort Bushi Kill Task", f={"fortbushikillcount","fortbushikilltaskwait"}, n={"Royal Guard"}, m={"Bushi Skeletons"}, d="Fort Bushi Skeletons", g=50, c="10.0S 63.9W", t="Tou-Tou fort", a="Tou-Tou", w=43370055, s="Conquest", r=true},
+  {q="Fort Knight Kill Task", f={"fortknightkillcount","fortknightkilltaskwait"}, n={"Royal Guard"}, m={"Void Knights"}, d="Fort Void Knights", g=50, c="10.1S 63.9W", t="Tou-Tou fort", a="Tou-Tou", w=43370054, s="Conquest", r=true},
+  {q="Fort Shadow Kill Task", f={"fortshadowkillcount","fortshadowkilltaskwait"}, n={"Royal Guard"}, m={"Panumbris Shadows"}, d="Fort Panumbris Shadows", g=50, c="10.1S 63.9W", t="Tou-Tou fort", a="Tou-Tou", w=43370053, s="Conquest", r=true},
   {q="Moarsmen Jailbreak", f={"freebooterkilltask0809","freebooterkilltaskboss10809","freebooterkilltaskboss1wait0809","freebooterkilltaskboss20809","freebooterkilltaskboss2wait0809","freebooterkilltaskboss30809","freebooterkilltaskboss3wait0809","freebooterkilltaskwait0809"}, n={"Avarin","Gate Warden Kris"}, c="56.4S 96.9E", t="Freebooter Isle", r=true},
   {q="Frost Golem Kill Task", f={"frostgolemkillcount","frostgolemkilltask"}, n={"George"}, m={"Frost Golem","Frost Golems"}, g=20, c="83.8N 4.3W", r=true},
   {q="Frozen Crystal Kill Task", f={"frozencrystalkillcount","frozencrystalkilltask"}, n={"Boone"}, m={"Frozen Crystal","Frozen Crystals"}, g=4, c="83.7N 4.3W", t="Frozen North", r=true},
@@ -193,7 +193,7 @@ local CATALOG = {
   {q="Three Eyed Snowman Kill Task", f={"hassnowglobeneydisa","heardblindsnowmansadstory","killtaskthreeeyedsnowman","killtaskthreeeyedsnowmanwait"}, n={"Blind Snowman"}, m={"Three Eyed Snowman"}, g=5, c="40.2N 35.1E", t="Holtburg", r=true},
   {q="Hea Windreave Kill Task", f={"heawindreavekillcount","heawindreavekilltask"}, n={"Susana du Loc"}, m={"Hea Windreave","Hea Windreaves"}, g=25, c="40.7N 83.2W", r=true},
   {q="Hell Bovine Kill Task", f={"hellbovinekillcount","hellbovinekilltaskwait"}, m={"Hell Bovine"}, s="Conquest", r=true},
-  {q="Hellfire Sorcerer Kill Task", f={"hellfiresorckillcount","hellfiresorckilltaskwait"}, m={"Hellfire Sorcerer"}, s="Conquest", r=true},
+  {q="Hellfire Sorcerer Kill Task", f={"hellfiresorckillcount","hellfiresorckilltaskwait"}, n={"Royal Guard"}, m={"Hellfire Sorcerers"}, d="Fort Hellfire Sorcerers", g=50, c="10.1S 63.9W", t="Tou-Tou fort", a="Tou-Tou", w=43370057, s="Conquest", r=true},
   {q="High Priest of T'thuun Kill Task", f={"highpriestacolytedead","highpriestfirstdead","highpriestseconddead","highpriestthirddead","holysymbolpickuptimer","killtaskmoarsmanhighprieststarted","killtaskmoarsmanhighpriestwait"}, n={"Kaymor ibn Dumandi","High Priest's First","High Priest's Third"}, m={"High Priest of T'thuun"}, c="92.6S 53.0W", t="Moarsman City", r=true},
   {q="Holly Jolly Helper Quest", f={"killtaskmosswartcynicwait_1121"}, n={"Osdryd"}, m={"Mosswart Cynics"}, g=15, c="29.0S 58.9E", t="Sawato", r=false},
   {q="Shadow Captain's Heaume Quest", f={"hopeslayerheart"}, n={"Chosen of Asheron"}, c="66.2N 14.3E", t="Stone Triad Dell portal", r=false},
@@ -300,7 +300,7 @@ local CATALOG = {
   {q="Olthoi Ripper Kill Task", f={"olthoiripperkillcount","olthoiripperkilltask"}, n={"Marcello"}, m={"Olthoi Ripper","Olthoi Rippers"}, g=250, c="90.2N 43.1W", t="Eastwatch", r=true},
   {q="Paradox-touched Grub Kill Task", f={"paradoxgrubkilltask","paradoxgrubkilltaskwait"}, n={"Alicia Swiftblade"}, m={"Paradox-touched Grub","Paradox-touched Olthoi Grubs"}, g=50, c="43.8N 54.9E", t="Olthoi North", r=true},
   {q="Paradox-touched Nymph Kill Task", f={"paradoxnymphkilltask","paradoxnymphkilltaskwait"}, n={"Tomihino"}, m={"Paradox-touched Nymph","Paradox-touched Olthoi Nymphs"}, g=50, c="43.8N 54.9E", t="Olthoi North", r=true},
-  {q="Pillar Hellfire Kill Task", f={"pillarhellfirekillcount","pillarhellfirekilltaskwait"}, m={"Pillar Hellfire"}, s="Conquest", r=true},
+  {q="Pillar Hellfire Kill Task", f={"pillarhellfirekillcount","pillarhellfirekilltaskwait"}, n={"Royal Guard"}, m={"Pillars of Hellfire"}, d="Fort Pillars of Hellfire", g=5, c="10.1S 63.9W", t="Tou-Tou fort", a="Tou-Tou", w=43370056, s="Conquest", r=true},
   {q="Plate Armoredillo Kill Task", f={"platearmoredillokillcount","platearmoredillokilltask"}, n={"Saqr"}, m={"Plate Armoredillo","Plate Armoredillos"}, g=25, c="1.5N 71.8W", t="Fort Tethana", r=true},
   {q="Polardillo Kill Task", f={"polardillokills","polardillotask"}, n={"Alessandro Mardor"}, m={"Polardillo","Polardillos"}, g=10, c="72.0N 61.2W", t="Sanamar", r=true},
   {q="Polar Ursuin Kill Task", f={"polarursuin","polarursuinkillcount"}, n={"Mariabella Varanese"}, m={"Polar Ursuin","Polar Ursuins"}, g=25, c="95.6N 56.3W", t="Fiun Outpost", r=true},
@@ -447,9 +447,18 @@ local function slug(s)
   return out
 end
 -- Singular forms a plural ("Drift-Touched Tuskers") may come from.
-local function singulars(plural)
+local singulars
+singulars = function(plural, head_only)
   local p = string.lower(trim(plural))
   local f = {p}
+  -- "pillars of hellfire" -> "pillar of hellfire": the plural is on the first word.
+  if not head_only and string.contains(p, " of ") then
+    local m = regexmatch(p, "^(.+?) of (.+)$")
+    if m then
+      local h = singulars(m["1"], true)
+      for i = 2, #h do f[#f + 1] = h[i] .. " of " .. m["2"] end
+    end
+  end
   local function add(x) if #x > 0 then f[#f + 1] = x end end
   if string.sub(p, -1) == "s" then add(string.sub(p, 1, -2)) end
   if string.sub(p, -2) == "es" then add(string.sub(p, 1, -3)) end
@@ -623,8 +632,9 @@ for _, e in ipairs(CATALOG) do
     local id = counter or done or e.f[1]
     local mobs = {}
     for _, m in ipairs(e.m or {}) do for _, f in ipairs(singulars(m)) do mobs[#mobs + 1] = f end end
-    CAT[id] = {name = e.q, mname = e.m and e.m[1], area = "Other", mobs = mobs, goal = e.g, npc = e.n and e.n[1], npcs = e.n,
-      key = counter, done = done, loc = loc, server = e.s, catalog = true, lxy = coords_xy(e.c), kt = kill_task_named(e.q)}
+    -- d: display name, a: area, w: the giver's weenie class (for givers with a shared name).
+    CAT[id] = {name = e.q, mname = e.d or (e.m and e.m[1]), area = e.a or "Other", mobs = mobs, goal = e.g, npc = e.n and e.n[1], npcs = e.n,
+      wcid = e.w, key = counter, done = done, loc = loc, server = e.s, catalog = true, lxy = coords_xy(e.c), kt = kill_task_named(e.q)}
     for _, f in ipairs(e.f) do CAT_BY_FLAG[f] = id end
   end
 end
@@ -858,6 +868,9 @@ end
 local function rebuild_indexes()
   ids_cache = nil
   MOB, NPC_BY_NAME, NPC_BY_WCID, DONE_OWNER = {}, {}, {}, {}
+  -- MOB[name] = the first task for a monster; MOB[0][name] = every task for it
+  -- (two tasks can share a monster: Tou-Tou outpost and fort Panumbris Shadows).
+  local all = {}; MOB[0] = all
   local ids, listed = {}, {}
   for _, id in ipairs(all_ids()) do ids[#ids + 1] = id; listed[id] = true end
   for id in pairs(CAT) do if not listed[id] then ids[#ids + 1] = id end end
@@ -865,7 +878,10 @@ local function rebuild_indexes()
   -- rather than toward a task created earlier from the same chat line.
   for _, id in ipairs(ids) do
     local d = db.tasks[id]
-    if not (d and d.custom) then for _, m in ipairs(task(id).mobs or {}) do MOB[m] = MOB[m] or id end end
+    if not (d and d.custom) then for _, m in ipairs(task(id).mobs or {}) do
+      MOB[m] = MOB[m] or id
+      local l = all[m] or {}; all[m] = l; if l[#l] ~= id then l[#l + 1] = id end
+    end end
   end
   if merge_duplicates() then
     local kept = {}
@@ -1012,7 +1028,26 @@ local function link_counter(plural, n, g)
 end
 
 local function on_kill_progress(plural, n, g, done, npc, wcid)
-  local id = resolve(plural) or link_counter(plural, n, g)
+  local id = resolve(plural)
+  -- A monster shared by several tasks: the one in progress whose kill goal
+  -- matches the message ("You must kill 50" is the fort task, not the outpost's).
+  local all = id and MOB[0]
+  if all then
+    local cands, seen = {}, {}
+    for _, f in ipairs(singulars(plural)) do
+      for _, x in ipairs(all[f] or {}) do if not seen[x] then seen[x] = true; cands[#cands + 1] = x end end
+    end
+    if #cands > 1 then
+      local score = -1
+      for _, x in ipairs(cands) do
+        local stt, p = status(x)
+        local goal = (p and p.g) or int(task(x).goal)
+        local sc = ((stt == "active" or stt == "turnin") and 2 or 0) + ((g and goal == g) and 1 or 0)
+        if sc > score then id, score = x, sc end
+      end
+    end
+  end
+  id = id or link_counter(plural, n, g)
   if not id then id = new_custom(plural, g, npc, wcid) end
   if not id then return end
   set_progress(id, n, g, done)
@@ -1050,6 +1085,17 @@ function guard.purge_cd()
     if string.sub(k, 1, 1) == "w" and tonumber(string.sub(k, 2)) then keep = NPC_BY_WCID[math.floor(tonumber(string.sub(k, 2)))] ~= nil
     else keep = NPC_BY_NAME[k] ~= nil end
     if not keep then st.npc_cd[k] = nil; dirty = true end
+  end
+end
+-- 4.17.8: the fort tasks' monsters were saved by hand as "penumbris shadow",
+-- "pillar of hellfire" etc.; the catalog now has them (the game spells it
+-- Panumbris), so those saved names are dropped once.
+function guard.fix_fort_db()
+  local OLD = {fortshadowkillcount = "penumbris shadow", pillarhellfirekillcount = "pillar of hellfire",
+    fortknightkillcount = "void knight", fortbushikillcount = "bushi skeleton", hellfiresorckillcount = "hellfire sorcerer"}
+  for id, old in pairs(OLD) do
+    local d = db.tasks[id]
+    if d and type(d.mobs) == "table" and #d.mobs == 1 and d.mobs[1] == old then d.mobs = nil; mark_db(); need_rebuild = true end
   end
 end
 local function on_cooldown(npc, wcid, secs)
@@ -1121,6 +1167,16 @@ end
 -- Irregular plurals a reply may use for a task's monster ("Gurog Henchmen" for
 -- "gurog henchman"); a regular plural already contains the singular.
 function guard.forms(m)
+  -- "pillar of hellfire": the plural goes on the first word ("pillars of hellfire").
+  if string.contains(m, " of ") then
+    local x = regexmatch(m, "^(.+?) of (.+)$")
+    if x then
+      local out = {m}
+      for i, h in ipairs(guard.forms(x["1"])) do if i > 1 then out[#out + 1] = h .. " of " .. x["2"] end end
+      out[#out + 1] = x["1"] .. "s of " .. x["2"]
+      return out
+    end
+  end
   if string.sub(m, -3) == "man" then return {m, string.sub(m, 1, -4) .. "men"} end
   if string.sub(m, -1) == "y" then return {m, string.sub(m, 1, -2) .. "ies"} end
   if string.sub(m, -1) == "f" then return {m, string.sub(m, 1, -2) .. "ves"} end
@@ -2013,7 +2069,10 @@ local function build(s, scan)
   -- Monster arrows + nearest per task
   local near, nav_target = {}, nil
   for _, o in ipairs(scan.monsters) do
-    local id = MOB[string.lower(o.name)]
+    local lname = string.lower(o.name)
+    local id = MOB[lname]
+    local l = MOB[0] and MOB[0][lname]
+    if l and #l > 1 then for _, x in ipairs(l) do if info[x] and info[x].status == "active" then id = x; break end end end
     if id and info[id] and info[id].status == "active" then
       near[id] = near[id] or o
       nav_target = nav_target or o
@@ -2309,7 +2368,7 @@ return function(s, p)
   if need_rebuild then rebuild_indexes(); need_rebuild = false end
   -- Once this server's task database is loaded (its givers are indexed), drop
   -- saved giver cooldowns that don't belong to a kill-task giver.
-  if not guard.purged and dbf.phase == "ready" then guard.purge_cd(); guard.purged = true end
+  if not guard.purged and dbf.phase == "ready" then guard.fix_fort_db(); guard.purge_cd(); guard.purged = true end
 
   -- Nearby scan (objects arrive nearest first)
   local range = tonumber(opt("range")) or 150
