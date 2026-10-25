@@ -1,4 +1,4 @@
--- KT_Tracker 4.17.6: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.7: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
 -- 4.17.4 (client build 135): plugin.json lists only the snapshot fields used
@@ -72,6 +72,11 @@
 --      giver, it is learned as that task's giver (never for shared names).
 --   ("You've earned N experience." also follows monster kills, hence the checks.)
 -- Players' chat and tells are never trusted as progress.
+-- 4.17.7: each complete quest-list read overrules what was worked out from
+-- chat before it was sent: kill counts (the server's counter is shown), tasks
+-- without a counter (not picked up), turn-ins the server didn't record (the
+-- counter kept and the completion flag not stamped), and cooldowns (the
+-- completion flag's timer wins over the tracker's own and the giver's).
 --
 -- Sources of truth:
 --   1. Quest-giver and server chat:
@@ -945,8 +950,9 @@ local function status(id)
   end
   if st.cd[id] and unix_now and st.cd[id] > unix_now then return "cooldown", nil, st.cd[id] - unix_now end
   if d and unix_now and d.d and d.d > 0 and d.t and unix_now < d.t + d.d then return "cooldown", nil, d.t + d.d - unix_now end
-  -- The quest giver said "You may complete this quest again in ..." (timer per giver).
-  if t.npc and unix_now then
+  -- The quest giver said "You may complete this quest again in ..." (timer per
+  -- giver); a completion flag with its own timer in the quest list wins.
+  if t.npc and unix_now and not (d and (d.d or 0) > 0) then
     local g = (t.wcid and t.wcid > 1 and st.npc_cd["w" .. t.wcid]) or ((not shared(t.npc)) and st.npc_cd[norm(t.npc)])
     if g and g > unix_now then return "cooldown", nil, g - unix_now end
   end
@@ -1588,6 +1594,25 @@ local function finish_myquests()
       if pr.prov and t and t.key then
         if QALL[t.key] then pr.prov = nil
         elseif (int(pr.n) or 0) == 0 and (pr.at or 0) < (mq.sent_at or 0) then st.prog[id] = nil; gone = gone + 1 end
+      end
+    end
+    -- 4.17.7: the quest list overrules everything worked out from chat before
+    -- the read was sent (newer kill messages still count until the next read).
+    local sent = mq.sent_at or 0
+    for id, pr in pairs(st.prog) do
+      local t = task(id)
+      -- The server's counter is shown instead; no counter: not picked up.
+      if t and t.key and (pr.at or 0) < sent and (QALL[t.key] or not pr.done) then st.prog[id] = nil end
+    end
+    for id, at in pairs(st.done_at) do
+      local t = task(id)
+      local q, d = t and t.key and QALL[t.key], t and t.done and QALL[t.done]
+      if at < sent and t.done then
+        -- A turn-in the tracker credited, but the server kept the counter and
+        -- didn't stamp the completion flag then: it wasn't this task.
+        if q and (q.t or 0) <= at and not (d and (d.t or 0) >= at - 120) then st.done_at[id] = nil; st.cd[id] = nil
+        -- The completion flag's own timer gives the cooldown.
+        elseif d and (d.d or 0) > 0 then st.cd[id] = nil end
       end
     end
   elseif mq.run_gap then

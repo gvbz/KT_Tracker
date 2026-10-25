@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.17.7
+
+- Your quest list now overrules everything the tracker worked out from chat. After each `/myquests` read:
+  - kill counts show the server's counter
+  - a task the server has no counter for is no longer shown as in progress
+  - a turn-in the server didn't record is undone (when several tasks are handed in at once, the tracker could credit the wrong one)
+  - cooldowns follow the quest's own timer
+- Kill messages that arrive after the read still count immediately.
+
 ## 4.17.6
 
 - Runs every 0.5 seconds again. After a Refresh the client hands a plugin the chat since login, 128 lines at a time; at once a second, new kill messages waited behind that backlog.
