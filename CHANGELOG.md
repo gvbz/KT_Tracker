@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.17.10
+
+- Lighter near towns and outposts: items, doors, portals, chests, lifestones and corpses are skipped before any checks, using the object type the client now reports (build 137). Nothing visible changes. Older clients work as before.
+
 ## 4.17.9
 
 - Lighter: the window is rebuilt only when something in it may have changed (a kill, pickup, turn-in, quest-list read, click or setting, or the minute for cooldown times), and at least every 5 seconds. The "!" markers and arrows are still worked out every half second but sent only when they change. Kill counts, clicks and markers update as fast as before.

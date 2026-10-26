@@ -1,4 +1,4 @@
--- KT_Tracker 4.17.9: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.10: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
 -- 4.17.4 (client build 135): plugin.json lists only the snapshot fields used
@@ -1071,7 +1071,7 @@ local function npc_cd_key(name, wcid) if wcid and wcid > 1 then return "w" .. wc
 local guard = {players = {}, pending = nil}
 -- "Gvbz's Mythic Dragon": a pet or summon of you or a nearby player, never an NPC.
 function guard.is_pet(name)
-  if type(name) ~= "string" then return false end
+  if type(name) ~= "string" or not string.contains(name, "'s ") then return false end
   local m = regexmatch(name, "^(.+)'s ")
   if not m then return false end
   local owner = string.lower(m["1"])
@@ -2400,16 +2400,19 @@ return function(s, p)
   local objects_near, npc_names, others = {}, {}, {}
   guard.players = {}
   for _, o in ipairs(s.objects or {}) do if o.player and type(o.name) == "string" then guard.players[string.lower(o.name)] = true end end
+  -- 4.17.10: the client labels each object (build 137 object_type); items,
+  -- doors, portals, containers, lifestones, corpses and players are skipped
+  -- before any name work. Without the label (older builds) every object is
+  -- looked at, as before.
   for _, o in ipairs(s.objects or {}) do
-    local d = tonumber(o.distance) or 1e9
-    if type(o.name) == "string" and not o.player and not guard.is_pet(o.name) then
+    local ot = o.object_type
+    if (ot == nil or ot == "creature" or ot == "vendor") and type(o.name) == "string" and not o.player and not guard.is_pet(o.name) then
+      local d = o.distance or 1e9
       if o.monster then
         if not o.dead and d <= range then scan.monsters[#scan.monsters + 1] = o end
         if not o.dead and d <= 30 then calm = false end
-      elseif not o.corpse then
-        if d <= 40 then npc_names[string.lower(o.name)] = o end
-        if d <= 15 then objects_near[#objects_near + 1] = o end
-        if d <= range then others[#others + 1] = o end
+      elseif not o.corpse and d <= range then
+        others[#others + 1] = o
       end
     end
   end
