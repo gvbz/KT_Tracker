@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.17.11
+
+- Options: "Automatic /myquests update" now also covers the read after login. Turned off, the tracker sends nothing on its own.
+- New option "Hide /myquests in chat" (on by default). Turned off, the tracker's own reads show in chat immediately.
+
 ## 4.17.10
 
 - Lighter near towns and outposts: items, doors, portals, chests, lifestones and corpses are skipped before any checks, using the object type the client now reports (build 137). Nothing visible changes. Older clients work as before.

@@ -1,6 +1,6 @@
-# Kill Task Tracker (KT_Tracker)
+# Kill Task Tracker
 
-A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest statuses from a /myquests dump and then displays relevant kill task information. The plugin runs whenever it is enabled and there are no specific start/stop buttons.
+A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest statuses from a /myquests dump and then displays relevant kill task information. 
 
 <img width="618" height="328" alt="KT_tracker_2" src="https://github.com/user-attachments/assets/2552f766-2297-4f96-8184-b339a5d053da" />
 <img width="989" height="379" alt="KT_tracker_3" src="https://github.com/user-attachments/assets/9af312d4-6786-4a2b-a773-2373510978ac" />
@@ -18,11 +18,13 @@ A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest sta
   - Red = On cool-down
   - Green = Ready to turn in
 - Compares /myquests against a base set of known kill task quests.
+- Built-in tasks cover Hoshino, Tou-Tou, Rynthid, Graveyard, Viridian Rise, Frozen Valley and Neftet. Other kill tasks are picked up from your quest list and chat.
+- The plugin runs whenever it is enabled and there are no specific start/stop buttons. To turn it off, disable it in the plugins menu.
 
 ## Requirements
 
-- AC:Unreal client build 126 (2026.10.19) or newer.
-- Works on any ACE server. Built-in tasks cover Hoshino, Tou-Tou, Rynthid, Graveyard, Viridian Rise, Frozen Valley and Neftet. Other kill tasks are picked up from your quest list and chat.
+- AC:Unreal client build 137 (2026.10.25) or newer.
+- Works on any ACE server.
 
 ## Install
 
@@ -58,7 +60,7 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
 
 ### How progress is tracked
 
-- **Your quest list.** The tracker reads `/myquests` automatically when you log in, and every 65 seconds after that (adjustable in settings). These reads are hidden from your chat windows.
+- **Your quest list.** The tracker reads `/myquests` automatically when you log in, and every 65 seconds after that (adjustable in settings). These reads are hidden from your chat windows (adjustable in settings). A `/myquests` you type yourself always shows. The quest list overrules anything worked out from chat.
 - **Kill messages.** Lines such as "You've killed 5 out of 20 ..." update the count immediately without relying on another /myquests poll.
 - **Turn-ins.** These are confirmed by your quest flags, or by using the quest giver followed by the reward. The tracker never relies on what an NPC says, and never counts other players' chat or tells as progress.
 - **Your data.** Everything is saved per character and per server, so characters with the same name on different servers stay separate.
@@ -74,6 +76,7 @@ Open **Manage** at the bottom of the window:
   - NPC indication !
   - Automatic /myquests update
   - /myquests update interval
+  - Hide /myquests in chat
   - scan range
   - default cooldown
   - the ! colors
