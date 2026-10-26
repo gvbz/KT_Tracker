@@ -1,10 +1,13 @@
--- KT_Tracker 4.17.10: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 4.17.11: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client build 126 or newer (local notices, one-line labels).
 --
 -- 4.17.4 (client build 135): plugin.json lists only the snapshot fields used
 -- ("snapshot_fields"), so the client no longer builds its full snapshot
 -- (inventory, spells, vendor data) for this plugin. Character name, action
 -- serial and the selection details come without it. Older builds ignore it.
+-- 4.17.11: Options "Automatic /myquests update" also covers the read after
+-- login (off: nothing is sent automatically); new "Hide /myquests in chat"
+-- (on by default) for the tracker's own reads.
 -- 4.17.6: callbacks every 0.5 s again ("update_interval": 0.5). The client
 -- hands a plugin at most 128 chat lines per callback and replays the login's
 -- chat after a Refresh, so at 1 s new kill lines waited behind that backlog.
@@ -87,12 +90,13 @@
 --        You've earned 123,456 experience.                                           -> turned in (cooldown starts)
 --        You may complete this quest again in 19h 59m 3s.                            -> cooldown
 --   2. Your quest list (@myquests), read 8 s after login and then every
---      "/myquests update interval" (default 65 s; Options can turn it off). The
+--      "/myquests update interval" (default 65 s; Options can turn both off). The
 --      server allows one read per 60 s, so reads closer together wait. ACE only
 --      runs chat commands that start with "@", so the tracker sends "@myquests"
 --      through the chat service (a "/" command would reach the server as speech).
 --      The tracker's own reads are hidden from the chat windows for 60 s
---      (chat_filter permission); the lines still reach the tracker.
+--      (chat_filter permission; Options "Hide /myquests in chat"); the lines
+--      still reach the tracker.
 --
 -- Storage (Saved/ClientPlugins/Profiles/kt_tracker/Library/), per server:
 --   Quests/<server>_<character>_<id>.json           the whole quest list; read at
@@ -395,7 +399,7 @@ local MYQ_HIDE = 60     -- seconds our quest-list reply is hidden from chat
 local NAV_MOVE_M, NAV_MIN_S = 10, 3  -- re-aim NAV when the target moved this far, at most this often
 local KILL_WORDS = {"killtask", "killcount", "slayerquest", "kills", "cull"}
 local DEFAULT_OPT = {
-  view = "Active", show_nav = true, npc_marks = true, auto_myq = true, myq_s = 65,
+  view = "Active", show_nav = true, npc_marks = true, auto_myq = true, myq_s = 65, myq_hide = true,
   range = 150, cooldown_hours = 20,
   col_available = "yellow", col_progress = "white", col_turnin = "green", col_cooldown = "red",
 }
@@ -783,7 +787,7 @@ local function flush_requests(now, out)
     -- lines still reach this plugin and the chat log). The client installs the
     -- rule before this request is sent; it expires after MYQ_HIDE seconds, so a
     -- /myquests you type yourself later stays visible.
-    if c == MYQUESTS then
+    if c == MYQUESTS and opt("myq_hide") ~= false then
       out.chat_filters = {{id = "kt_myquests", contains = " solves (", sender = "", seconds = MYQ_HIDE}}
     end
   end
@@ -1986,6 +1990,7 @@ local function handle_events(s, now)
         fill[tid][string.sub(id, 1, 2) == "fm" and "mobs" or "npc"] = tostring(v or "")
       elseif string.sub(id, 1, 3) == "ed_" then draft[string.sub(id, 4)] = v
       elseif string.sub(id, 1, 4) == "opt|" then st.opt[string.sub(id, 5)] = v; dirty = true
+        if id == "opt|myq_hide" and v == false then guard.clear_filters = true end
         if id == "opt|show_nav" and v == false and nav.id ~= 0 then
           request({id = "nav_clear", service = "waypoint", operation = "clear"})
           nav.id, nav.pos = 0, nil
@@ -2279,9 +2284,12 @@ local function build(s)
   local colsel = function(key, text) return {id = "opt|" .. key, type = "select", size = TXT.body, text = text, value = opt(key), options = COLORS} end
   local options = {
     {id = "opt|npc_marks", type = "checkbox", size = TXT.body, text = "NPC indication !", value = opt("npc_marks"), tooltip = "! over quest givers, colored by task state"},
-    {id = "opt|auto_myq", type = "checkbox", size = TXT.body, text = "Automatic /myquests update", value = opt("auto_myq") ~= false},
+    {id = "opt|auto_myq", type = "checkbox", size = TXT.body, text = "Automatic /myquests update", value = opt("auto_myq") ~= false,
+      tooltip = "Reads your quest list after login and on the interval"},
     {id = "opt|myq_s", type = "number", size = TXT.body, text = "/myquests update interval", min = 1, max = 300, step = 1, value = tonumber(opt("myq_s")) or 65,
       tooltip = "Seconds (1-300). The server answers one /myquests per minute.", enabled = opt("auto_myq") ~= false},
+    {id = "opt|myq_hide", type = "checkbox", size = TXT.body, text = "Hide /myquests in chat", value = opt("myq_hide") ~= false,
+      tooltip = "Hides the tracker's own /myquests replies from the chat windows. A /myquests you type always shows."},
     {id = "opt|range", type = "slider", size = TXT.body, text = "Scan range (m)", min = 20, max = 240, step = 10, value = tonumber(opt("range")) or 150},
     {id = "opt|cooldown_hours", type = "number", size = TXT.body, text = "Default cooldown after turn-in (hours)", min = 0, max = 168, step = 1, value = tonumber(opt("cooldown_hours")) or 20},
     colsel("col_available", "! color: available"), colsel("col_progress", "! color: in progress"),
@@ -2493,7 +2501,7 @@ return function(s, p)
   -- Automatic quest-list reads: after login, then on the chosen interval.
   if not mq.login_done and now - started_at > 8 then
     mq.login_done = true
-    request_myquests("login", now)
+    if opt("auto_myq") ~= false then request_myquests("login", now) end
   end
   local every = refresh_seconds()
   if mq.wait_at and now >= mq.wait_at and not mq.active then request_myquests(mq.wait_via or "timer", now)
@@ -2542,5 +2550,7 @@ return function(s, p)
   end
 
   flush_requests(now, out)
+  -- "Hide /myquests in chat" switched off: drop a hiding rule still running.
+  if guard.clear_filters then guard.clear_filters = nil; if not out.chat_filters then out.chat_filters = {} end end
   return out
 end
