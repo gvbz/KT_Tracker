@@ -23,7 +23,7 @@ A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest sta
 
 ## Requirements
 
-- AC:Unreal client build 137 (2026.10.25) or newer.
+- AC:Unreal client v146 or newer.
 - Works on any ACE server.
 
 ## Install
@@ -42,15 +42,16 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
 
 - **Show in NAV**: turns the green arrows over task monsters and NAV arrow integration on or off.
 - **Area list**: pick **Active** (tasks you are working on or can turn in), a specific hunting area, or **Other**. Newly detected quests that are uncategorized will be placed into **Other**.
-- **Task lines**: one line per task, showing the task name and your kill count. The color shows the state:
-  - white: in progress, with your count (e.g. `Devourer Marguls  6/15`)
-  - green: ready to turn in
+- **Task bars**: one progress bar per task, showing the task name and your kill count (e.g. `Devourer Marguls  6 / 15`). The label color shows the state:
+  - white: in progress
+  - green: ready to turn in (full bar)
   - yellow: available to pick up
   - red: on cooldown, with the time left
-- **Open a task line** to see its progress bar and three buttons:
-  - **Select**: selects the nearest task monster, or the quest giver if you aren't working on the task.
-  - **Chat**: shows the task's details in your chat window (quest giver, location, kills needed, quest flags). Only you see these lines.
-  - **Edit**: change the task's name, monsters, quest giver, kills required, cooldown or area. You can also reset its progress, undo your changes, or delete a task you added.
+  - Click a bar to show the task's details in your chat window (quest giver, location, kills needed, quest flags). Only you see these lines.
+- Beside each bar:
+  - **S** (Select): selects the nearest task monster, or the quest giver if you aren't working on the task.
+  - **E** (Edit): opens the task's edit menu under the bar: name, monsters, quest giver, kills required, cooldown, area and its two quest flags. You can also reset its progress, undo your changes, or delete a task you added. Press **E** again to close it.
+- **Quest flags** in the edit menu: the **counter flag** (counts your kills) and the **completion flag** (stamped when you turn the task in). They are filled in from your `/myquests` list when the tracker can tell which flags belong to the task, and each has a list of the kill-task flags in your quest list to pick from. A flag can belong to one task only.
 
 ### In the world
 
@@ -62,14 +63,15 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
 
 - **Your quest list.** The tracker reads `/myquests` automatically when you log in, and every 65 seconds after that (adjustable in settings). These reads are hidden from your chat windows (adjustable in settings). A `/myquests` you type yourself always shows. The quest list overrules anything worked out from chat.
 - **Kill messages.** Lines such as "You've killed 5 out of 20 ..." update the count immediately without relying on another /myquests poll.
-- **Turn-ins.** These are confirmed by your quest flags, or by using the quest giver followed by the reward. The tracker never relies on what an NPC says, and never counts other players' chat or tells as progress.
+- **Turn-ins and pickups.** The client tells the tracker which NPC you used, so only that NPC's replies, and server lines in the next 10 seconds, count. A turn-in is the quest giver used followed by the reward, or its completion flag stamped. After a pickup or turn-in, your quest list is read again as soon as the server allows (once per minute) to confirm it.
+- **Only the lines it needs.** The client hands the tracker only server lines it uses (quest list, kill counts, stamps, rewards, quest-giver replies) and NPC speech, so busy combat chat never delays a kill count. Other players' chat never counts as progress.
 - **Your data.** Everything is saved per character and per server, so characters with the same name on different servers stay separate.
 
 ### Manage
 
-Open **Manage** at the bottom of the window:
+Open **Manage** at the bottom of the window (hidden while the window is pinned):
 
-- **Detected**: kill tasks found in your quest list or chat whose monster or quest giver isn't known yet. Fill them in and press **Save**, or press **Remove** to hide one. "Refresh list" in the quest-giver box lists the NPCs near you.
+- **Detected**: kill tasks found in your quest list or chat whose monster or quest giver isn't known yet, five per page. Open one for its full edit menu, fill it in and press **Save**, or press **Remove** to hide it. "Refresh list" in the quest-giver box lists the NPCs near you.
 - **Add**: add your own task, and your own areas.
 - **Quest log**: when your quest list was last read, any lines it didn't understand, and where your files are saved.
 - **Options**:
@@ -89,15 +91,15 @@ The plugin uses the following service requests:
 
 | Permission | Used for |
 |---|---|
-| chat | reading kill messages and quest-list replies |
+| chat | reading kill messages, quest-list replies and quest-giver replies (only the lines it subscribes to) |
 | chat_filter | hiding its own `/myquests` replies from your chat windows |
 | say | sending `@myquests` |
 | state | saving your settings and progress |
 | profiles | saving your quest list and task database files |
-| ui | its window, and the Chat button's local messages |
+| ui | its window, and the task details shown in chat |
 | markers | the ! and arrows |
 | waypoint | the NAV arrow |
-| data | your XP and actions, used to confirm turn-ins |
+| data | which NPC you used, to confirm pickups and turn-ins |
 
 ## Your files
 

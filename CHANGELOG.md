@@ -1,5 +1,24 @@
 # Changelog
 
+## 5.0.0
+
+Needs AC:Unreal client v146 or newer.
+
+- **Window**
+  - Each task is a progress bar with its name and count (no more drop-down per task). Click the bar for the task's details in chat.
+  - **S** (Select) and **E** (Edit) sit beside each bar. E opens the edit menu under the bar.
+  - The edit menu has two new fields, the counter quest flag and the completion quest flag, filled in from your `/myquests` list, each with a list of your quest list's kill-task flags.
+  - Detected: each task opens to the full edit menu, five per page.
+  - Manage is hidden while the window is pinned.
+- **Chat**
+  - The tracker subscribes only to the lines it uses (server lines and NPC speech), so busy combat chat no longer delays kill counts, and less work is done per update.
+  - The client says who sent each line. Other players' chat can never count, even with an NPC's name.
+  - After a Refresh, the tracker starts at the newest line instead of replaying the login's chat.
+- **Pickups and turn-ins**
+  - The client now reports which NPC you used. The NPC no longer needs to be selected or within 6 m, and chests and items are told apart from NPCs.
+  - After a pickup or turn-in, `/myquests` is read again as soon as the server allows (once per minute) to confirm it.
+- Removed fallbacks for clients older than v146.
+
 ## 4.17.11
 
 - Options: "Automatic /myquests update" now also covers the read after login. Turned off, the tracker sends nothing on its own.

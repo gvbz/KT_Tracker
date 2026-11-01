@@ -1,139 +1,61 @@
--- KT_Tracker 4.17.11: kill-task tracker for the AC:Unreal client (API 2 companion).
--- Needs client build 126 or newer (local notices, one-line labels).
+-- KT_Tracker 5.0.0: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- Needs client v146 or newer (chat_subscriptions, sender_type, use events,
+-- progress labels, clickable controls, hide_when_pinned).
 --
--- 4.17.4 (client build 135): plugin.json lists only the snapshot fields used
--- ("snapshot_fields"), so the client no longer builds its full snapshot
--- (inventory, spells, vendor data) for this plugin. Character name, action
--- serial and the selection details come without it. Older builds ignore it.
--- 4.17.11: Options "Automatic /myquests update" also covers the read after
--- login (off: nothing is sent automatically); new "Hide /myquests in chat"
--- (on by default) for the tracker's own reads.
--- 4.17.6: callbacks every 0.5 s again ("update_interval": 0.5). The client
--- hands a plugin at most 128 chat lines per callback and replays the login's
--- chat after a Refresh, so at 1 s new kill lines waited behind that backlog.
---
--- Window (title and icon from plugin.json "presentation"; no Start/Stop,
--- status line or settings section): "Show in NAV" at the top (arrows over task
--- monsters and the NAV arrow to the closest one), then the area selector
--- (Active, a hunting area, one of your own areas, or Other). Each task is a
--- collapsible line: name and count, coloured by state (white in progress,
--- green ready to turn in, yellow available, red on cooldown with the time
--- left). Opened, it shows the progress bar and Select / Chat / Edit:
---   Select  the nearest task monster, or the quest giver; looked up when clicked
---   Chat    the task's details (giver, location, kills, quest flags) as local
---           notices in chat (notice service: only you see them, nothing sent)
---   Edit    the task's fields in place, saved to the task database
--- Manage holds:
---   Detected  kill tasks found in your quest list or chat whose monster or quest
---             giver is unknown, with boxes to fill them in, or Remove
---   Add       a new task, and areas of your own (removing one moves its tasks
---             to Other); saved in the task database for this server
---   Quest log when the quest list was read, lines it didn't understand, and
---             where the quest file and task database are saved
+-- Window (title and icon from plugin.json "presentation"): "Show in NAV", the
+-- area selector (Active, a hunting area, one of your own areas, or Other),
+-- then one row per task: a progress bar showing the monster/task name and
+-- "kills / goal" (white in progress, green ready to turn in, yellow available,
+-- red on cooldown with the time left), and two small buttons:
+--   bar  click it: the task's details (giver, location, kills, quest flags) as
+--        local notices in chat (only you see them, nothing is sent)
+--   S    Select the nearest task monster, or the quest giver
+--   E    Edit the task's fields in place (saved to the task database)
+-- Manage (hidden while the window is pinned) holds:
+--   Detected  kill tasks found in your quest list or chat whose monster or giver
+--             is unknown, 5 per page; each opens to the full edit form
+--   Add       a new task, and areas of your own
+--   Quest log when the quest list was read, lines it didn't understand, files
 --   Options
--- Every label is one line (wrap=false); long text is clipped and its full text
--- is the tooltip. Text sizes: TXT.body 13, TXT.small 11.
+-- The edit form has two quest-flag fields: the counter flag (kill count) and
+-- the completion flag (stamped on turn-in). Both are filled in from your
+-- /myquests list when the tracker can tell which flags belong to the task, and
+-- both lists offer the flags from that list.
 --
--- Window updates: the client keeps controls by id and type and updates them in
--- place, but the window is only rebuilt when something shown changes: no
--- distances or live object ids, a fixed task order (state, then name), Select
--- buttons that look up their target when clicked, and nearby-NPC lists read
--- only when "Refresh list" is picked.
+-- Chat (5.0.0): plugin.json "chat_subscriptions" deliver only the lines the
+-- tracker uses: server lines (quest list, kill counts, stamps, experience,
+-- "Destroy N of these", "again in", /myquests replies) and NPC/vendor speech.
+-- "sender_type" says who sent each line, so a player's chat never counts.
+-- "chat_history": false starts at the newest line (no replay after Refresh).
 --
--- Which NPC a line is about: only the NPC you have selected (within 6 m) and
--- use. "Destroy N of these..." and "You may complete this quest again in..."
--- system lines count only when that NPC's use is confirmed (action_serial) within
--- 3 s; nothing is ever credited to whatever happens to stand nearby. A giver's
--- cooldown is kept only for known kill-task givers, and pets ("<player>'s ...")
--- are never treated as NPCs. Task cooldowns otherwise come from /myquests.
--- NPC tells count only from that selected NPC. Givers with a shared name (five
--- "Royal Guard"s at Tou-Tou fort) are learned the same way: when the selected,
--- used NPC names a task's monster (pickup reply, "Destroy N of these", a
--- progress tell) or is the only one of that name with a task ready to turn in,
--- its weenie class is saved to that task in the task database. Then that NPC,
--- and only it, gets the task's "!" and its pickups and turn-ins.
+-- NPC use (5.0.0): the client's "use" events (data permission) name the used
+-- object and its weenie class. Only that NPC's tells, and server lines in the
+-- 10 s after it was used, count for pickups, "Destroy N", cooldowns and
+-- turn-ins (use + experience line, or a stamp). Shared-name givers (five
+-- "Royal Guard"s at Tou-Tou fort) are learned by the used NPC's weenie class.
+-- Pets ("<player>'s ...") are never treated as NPCs.
 --
--- Chat: the client runs this every 0.5 s and hands over new chat each time.
--- Kill counts, rewards and stamps are handled as soon as they arrive; only
--- quest-list lines (hundreds at a time) are queued and worked through.
---
--- Turn-ins are recognised three ways (never from what an NPC says):
---   1. Quest flags: a completion/timer flag in your quest list stamped after the
---      last kill (for unlisted tasks it is found by name, e.g. busydoorkillcount
---      -> busydoorkilltask), or the kill counter disappearing from a complete list.
---   2. "You've stamped <flag>!" chat lines (servers that announce stamps): a
---      stamp on a task's completion flag turns it in immediately.
---   3. Using the quest giver: snapshot.action_serial (full snapshot, "data"
---      permission) advances each time the server finishes one of your actions
---      (UseDone), including using an NPC by hand. A use is that serial advancing
---      without an error while a non-monster NPC is selected within 6 m. A use
---      plus an experience reward within 10 s of each other (either order),
---      while one of that NPC's tasks has every kill done, is a turn-in.
---      A tell from the selected NPC also counts as a use. (Without
---      action_serial, e.g. an older client: no live monster within 30 m.)
---      If that NPC isn't a known giver and only one finished task has no
---      giver, it is learned as that task's giver (never for shared names).
---   ("You've earned N experience." also follows monster kills, hence the checks.)
--- Players' chat and tells are never trusted as progress.
--- 4.17.7: each complete quest-list read overrules what was worked out from
--- chat before it was sent: kill counts (the server's counter is shown), tasks
--- without a counter (not picked up), turn-ins the server didn't record (the
--- counter kept and the completion flag not stamped), and cooldowns (the
--- completion flag's timer wins over the tracker's own and the giver's).
---
--- Sources of truth:
---   1. Quest-giver and server chat:
---        <NPC> tells you, "Destroy 4 of these <Monster> and you will be rewarded."  -> task started
---        You have killed 5 <Plural>! You must kill 20 to complete your task.        -> progress
---        You've killed 5 out of 20 <Plural>.                                         -> progress
---        You have killed 20 <Plural>! Your task is complete!                         -> ready to turn in
---        You've earned 123,456 experience.                                           -> turned in (cooldown starts)
---        You may complete this quest again in 19h 59m 3s.                            -> cooldown
---   2. Your quest list (@myquests), read 8 s after login and then every
---      "/myquests update interval" (default 65 s; Options can turn both off). The
---      server allows one read per 60 s, so reads closer together wait. ACE only
---      runs chat commands that start with "@", so the tracker sends "@myquests"
---      through the chat service (a "/" command would reach the server as speech).
---      The tracker's own reads are hidden from the chat windows for 60 s
---      (chat_filter permission; Options "Hide /myquests in chat"); the lines
---      still reach the tracker.
+-- Your quest list (@myquests) is the foundation: read 8 s after login, every
+-- "/myquests update interval" (default 65 s), and as soon as the server's 60 s
+-- limit allows after a pickup or turn-in. Each complete read overrules what
+-- was worked out from chat before it was sent (counts, pickups, turn-ins,
+-- cooldowns). The tracker's own reads are hidden from the chat windows (server
+-- lines only); reads you type yourself are shown.
 --
 -- Storage (Saved/ClientPlugins/Profiles/kt_tracker/Library/), per server:
---   Quests/<server>_<character>_<id>.json           the whole quest list; read at
---                                                    start as the basis, rewritten
---                                                    after every read (other
---                                                    plugins can read it)
---   Database/KillTaskDB_<server>.json                task details for that server
---                                                    (monsters, givers, your tasks)
+--   Quests/<server>_<character>_<id>.json   the whole quest list (other plugins
+--                                            can read it)
+--   Database/KillTaskDB_<server>.json        task details (monsters, givers,
+--                                            quest flags, your tasks)
 --   plus per-character progress and timers in the plugin's saved state.
--- Quest lines are read tolerantly (Oracle of Dereth's rules): servers may leave
--- out the message/max/delay part (kill goals then come from the catalog), add a
--- space before the message, or add text at the end.
 --
 -- Catalog: kill-task quests from Oracle of Dereth's quests.csv (quest names,
--- givers, towns, coordinates, kill counts, quest flags) name quest flags and
--- mark known quest givers. Built-in tasks (TASKS) come from Aunberean data.
+-- givers, towns, coordinates, kill counts, quest flags). Built-in tasks (TASKS)
+-- come from Aunberean data.
 --
--- Quest-giver "!" markers come from the client's lightweight nearby-object list
--- (snapshot.objects, nearest first, within the scan range): any non-monster,
--- non-player object whose name (case/spacing ignored) or weenie class matches a
--- known giver gets a "!". Many givers share a name ("Royal Guard", "Umbral
--- Guard", "Hunter"), so a name only counts when the weenie class also matches
--- (built-in tasks know it), or, failing that, near the catalog's giver location.
--- A shared name never teaches a weenie class; a giver telling you its task's
--- progress does. Catalog quests that aren't kill tasks (e.g. The Crystal Idol of
--- the A'nekshay, Bemeth the Gatherer) are tracked but never mark their NPCs.
--- Edit, Detected and Add offer a "pick a nearby NPC" list (within 30 m, read
--- when "Refresh list" is picked) so givers are entered exactly as the game
--- spells them.
---
--- NAV arrow: re-aimed when the closest task monster changes, or when it has
--- moved over 10 m (at most every 3 s). Each re-aim saves the Waypoint profile,
--- so it isn't re-aimed every callback. With no task monster near, it points to
--- a quest giver whose task is ready to turn in.
---
--- Quest-giver "!" colours (configurable): yellow available, white in progress
--- (the client has no orange), green ready to turn in, red on cooldown.
+-- Markers: "!" over quest givers (yellow available, white in progress, green
+-- ready to turn in, red on cooldown), green arrows over task monsters, and the
+-- NAV arrow to the closest one, from the nearby-object list.
 
 -- Kill-task catalog generated from Oracle of Dereth quests.csv (MIT, curated by Advis).
 -- q quest, f quest flags, n quest givers, m monsters, g kills, c giver coords, t town, s server-only, r repeatable
@@ -676,7 +598,7 @@ local function task(id)
   if not d then return b end
   return {name = d.name or b.name, mname = (not d.name) and b.mname or nil, area = d.area or b.area,
     mobs = (d.mobs and #d.mobs > 0) and d.mobs or b.mobs, goal = d.goal or b.goal, npc = d.npc or b.npc, npcs = b.npcs,
-    wcid = d.wcid or b.wcid, key = b.key, done = b.done, cd_h = d.cd_h, loc = b.loc, quest = b.quest,
+    wcid = d.wcid or b.wcid, key = d.key or b.key, done = d.done or b.done, cd_h = d.cd_h, loc = b.loc, quest = b.quest,
     server = b.server, catalog = b.catalog, lxy = b.lxy, kt = b.kt, own_npc = d.npc ~= nil, edited = true}
 end
 local function display(t) return t.mname or t.name or "?" end
@@ -722,8 +644,8 @@ local function all_ids()
 end
 
 -- Session
+local guard = {players = {}, pending = nil, BAR = {}, DSLOT = {}, dpage = 1, FLAG = {}, FLAG_HINT = "(your quest flags)"}
 local started_at, unix_now, tick_now = nil, nil, 0
-local last_action_serial = nil
 local last_note = ""
 local function note(t) last_note = string.sub(t, 1, 240) end
 -- Queue of chat lines still to process: entries chat_queue[queue_head .. queue_tail].
@@ -732,7 +654,6 @@ local chat_queue, queue_head, queue_tail = {}, 1, 0
 local function queued() return queue_tail - queue_head + 1 end
 local function enqueue(item) queue_tail = queue_tail + 1; chat_queue[queue_tail] = item end
 local QUEUE_MAX = 6000             -- our own backlog of relevant lines (the client keeps the rest)
-local hist_serial = nil            -- chat_latest_serial when the tracker started (older lines are history)
 local chat_left = 0                -- client backlog still to be delivered (chat_pending)
 local nav = {id = 0, at = -1e9, pos = nil}
 local draft = {area = "Other"}     -- Manage > Add: new task form
@@ -742,7 +663,7 @@ local pending_select = nil         -- object to select on this callback (from a 
 local picker_names = nil           -- nearby NPC names for the giver pickers, read when "Refresh list" is picked
 local PICK_HINT, PICK_REFRESH = "(nearby NPCs)", "Refresh list"
 local new_area = ""
-local FILL_IDS, fill = {}, {}      -- Detected tab: control id -> task id; typed values per task
+local fill = {}                    -- Detected tab: the edit form per task (typed values)
 local my_name, my_player, my_server = nil, nil, nil
 
 -- /myquests: replies arrive in batches (128 lines per callback); a "run" is one
@@ -788,7 +709,7 @@ local function flush_requests(now, out)
     -- rule before this request is sent; it expires after MYQ_HIDE seconds, so a
     -- /myquests you type yourself later stays visible.
     if c == MYQUESTS and opt("myq_hide") ~= false then
-      out.chat_filters = {{id = "kt_myquests", contains = " solves (", sender = "", seconds = MYQ_HIDE}}
+      out.chat_filters = {{id = "kt_myquests", contains = " solves (", sender_type = "server", seconds = MYQ_HIDE}}
     end
   end
   if #batch == 0 then return end
@@ -818,6 +739,13 @@ local function request_myquests(via, now)
   say(MYQUESTS)
   mq.sent_at, mq.req_at, mq.via, mq.new_run = unix_now, now, via, true
   return true
+end
+-- 5.0.0: after a pickup or turn-in, the next quest-list read is sent as soon
+-- as the server allows (one read per 60 s), so the list confirms it quickly.
+function guard.confirm_read()
+  if opt("auto_myq") == false then return end
+  local at = math.max(tick_now + 3, (mq.req_at or -1e9) + MYQ_MIN_GAP)
+  if not mq.wait_at or at < mq.wait_at then mq.wait_at, mq.wait_via = at, "confirm" end
 end
 -- "4 min" -> 4; "Off" -> nil
 -- Seconds between automatic reads (Options, 1-300); nil when switched off.
@@ -872,6 +800,7 @@ end
 local function rebuild_indexes()
   ids_cache = nil
   MOB, NPC_BY_NAME, NPC_BY_WCID, DONE_OWNER = {}, {}, {}, {}
+  guard.FLAG = {}   -- counter flag -> task (5.0.0: flags can be edited)
   -- MOB[name] = the first task for a monster; MOB[0][name] = every task for it
   -- (two tasks can share a monster: Tou-Tou outpost and fort Panumbris Shadows).
   local all = {}; MOB[0] = all
@@ -896,6 +825,7 @@ local function rebuild_indexes()
     local t = task(id)
     if db.tasks[id] and db.tasks[id].custom then for _, m in ipairs(t.mobs or {}) do MOB[m] = MOB[m] or id end end
     if t.done then DONE_OWNER[t.done] = DONE_OWNER[t.done] or id end
+    if t.key then guard.FLAG[t.key] = guard.FLAG[t.key] or id end
     local names = {}
     if t.npc and #t.npc > 0 then names[1] = t.npc end
     -- Only catalog quests that name monsters mark their givers (keeps generic NPCs quiet).
@@ -1064,7 +994,7 @@ local function on_task_start(npc, wcid, plural, goal)
   if not id then return end
   link_npc(id, npc, wcid)
   if goal and not task(id).goal then db_task(id).goal = goal; mark_db() end
-  if not st.prog[id] then st.prog[id] = {n = 0, g = goal, done = false, at = unix_now}; dirty = true end
+  if not st.prog[id] then st.prog[id] = {n = 0, g = goal, done = false, at = unix_now}; dirty = true; guard.confirm_read() end
   st.cd[id] = nil; ids_cache = nil
   note(display(task(id)) .. ": started (" .. (int(goal) or "?") .. " to kill)")
 end
@@ -1072,7 +1002,6 @@ end
 local function npc_cd_key(name, wcid) if wcid and wcid > 1 then return "w" .. wcid end; return norm(name) end
 -- Pets and lines waiting for their NPC's use (fields, not locals: the main chunk
 -- is near Lua's 200-local limit).
-local guard = {players = {}, pending = nil}
 -- "Gvbz's Mythic Dragon": a pet or summon of you or a nearby player, never an NPC.
 function guard.is_pet(name)
   if type(name) ~= "string" or not string.contains(name, "'s ") then return false end
@@ -1113,9 +1042,8 @@ local function on_cooldown(npc, wcid, secs)
 end
 
 local npc_told, npc_told_n = {}, 0  -- object id -> tick of its last tell to you
-local npc_used, used_ids = {}, {}  -- object id -> tick you last used it (action_serial); ids seen
-local has_action_serial = false     -- the snapshot reports action_serial
--- Run fn(npc) once that selected NPC's use is confirmed: at once if it was used in
+local npc_used, used_ids = {}, {}  -- object id -> tick you last used it (client "use" events); ids seen
+-- Run fn(npc) once that NPC's use is confirmed: at once if it was used in
 -- the last 10 s, else when its use arrives within 3 s (else dropped).
 function guard.after_use(npc, fn)
   local u = npc_used[npc.id]
@@ -1222,26 +1150,24 @@ local function resolve_pickup()
       local t = task(k.id)
       local goal = k.goal or int(t.goal)
       st.prog[k.id] = {n = 0, g = goal, done = false, at = unix_now, prov = true}
-      st.cd[k.id] = nil; ids_cache = nil; dirty = true
+      st.cd[k.id] = nil; ids_cache = nil; dirty = true; guard.confirm_read()
       note(display(t) .. ": started (" .. (goal or "?") .. " to kill)")
     end
   end
 end
 local pending_reward = nil          -- {npc, at}: a reward waiting for its use (<= 10 s)
-local function on_turn_in(use_npc, calm, forced)
-  -- An experience reward while a quest giver is selected and within reach (you
-  -- just used them) completes that giver's finished task. If the selected NPC
-  -- isn't known as a giver yet and only one finished task has no giver (or only
-  -- one task is finished), that task was turned in and the NPC is remembered as
-  -- its giver (never for shared names such as "Royal Guard").
-  -- ACE prints "You've earned N experience." for monster kills too, so only a
-  -- reward while an NPC is selected and within reach counts.
+local function on_turn_in(use_npc, forced)
+  -- An experience reward right after you used a quest giver (client "use"
+  -- event, within 10 s) completes that giver's finished task. If the NPC isn't
+  -- known as a giver yet and only one finished task has no giver (or only one
+  -- task is finished), that task was turned in and the NPC is remembered as its
+  -- giver (never for shared names such as "Royal Guard").
+  -- ACE prints "You've earned N experience." for monster kills too, so a reward
+  -- with no NPC used just before it never counts.
   if not use_npc then return end
-  -- Proof you used it: the server finished a use with it selected, or it
-  -- answered you, within 10 s. A reward that comes first waits up to 10 s.
+  -- Proof you used it: its use event, or a tell from it, within 10 s.
   local told, used = npc_told[use_npc.id], npc_used[use_npc.id]
   local proof = forced or (used and tick_now - used <= 10) or (told and tick_now - told <= 10)
-    or (calm and not has_action_serial)
   if not proof then pending_reward = {npc = use_npc, at = tick_now}; return end
   pending_reward = nil
   local cands, no_giver = {}, {}
@@ -1278,8 +1204,48 @@ local function on_turn_in(use_npc, calm, forced)
   st.cd[pick] = unix_now + hours * 3600
   ids_cache = nil
   if t.npc and #npc_ids(t.npc, t.wcid) == 1 then st.npc_cd[npc_cd_key(t.npc, t.wcid)] = unix_now + hours * 3600 end
-  dirty = true
+  dirty = true; guard.confirm_read()
   note(display(t) .. ": turned in" .. (t.npc and (" to " .. t.npc) or "") .. ", next in " .. dur(hours * 3600))
+end
+
+-- 5.0.0: the client reports each use (snapshot events, type "use"): stage
+-- "requested" the moment you use something (with its GUID and weenie class),
+-- "completed" (with an error number) when the server finishes it. Using a
+-- living, non-monster creature or vendor near you (not a player or a pet) is
+-- an NPC use: it starts the pickup check, confirms a waiting reward, and
+-- attributes the next few seconds of "Destroy N of these" / "again in" lines
+-- and that NPC's tells. No selection or distance guesswork.
+function guard.used_npc(window)
+  local u = guard.use
+  if u and not u.err and tick_now - u.at <= (window or 10) then return u.npc end
+  return nil
+end
+function guard.on_use(e, s)
+  local id = tonumber(e.target) or tonumber(e.source)
+  if not id then return end
+  if e.stage == "completed" then
+    local u = guard.use
+    if u and u.npc.id == id and (tonumber(e.error) or 0) ~= 0 then
+      u.err = true
+      if pickup and pickup.npc.id == id then pickup = nil end
+    end
+    return
+  end
+  if e.stage ~= "requested" then return end
+  local o
+  for _, x in ipairs(s.objects or {}) do if x.id == id then o = x; break end end
+  if not o or o.player or o.monster or o.corpse or type(o.name) ~= "string" or guard.is_pet(o.name)
+    or (o.object_type and o.object_type ~= "creature" and o.object_type ~= "vendor") then guard.use = nil; return end
+  local npc = {id = o.id, name = o.name, wcid = math.floor(tonumber(e.wcid) or tonumber(o.wcid) or 0)}
+  guard.use = {npc = npc, at = tick_now}
+  if next(npc_used) and #used_ids > 200 then npc_used, used_ids = {}, {} end
+  if not npc_used[npc.id] then used_ids[#used_ids + 1] = npc.id end
+  npc_used[npc.id] = tick_now
+  local pd = guard.pending
+  if pd and pd.npc.id == npc.id and tick_now - pd.at <= 3 then guard.pending = nil; pd.fn(npc) end
+  begin_pickup(npc)
+  local pr = pending_reward
+  if pr and pr.npc.id == npc.id and tick_now - pr.at <= 10 then on_turn_in(pr.npc, true) end
 end
 
 -- /myquests line: key - solves solves (last)"desc" max delay
@@ -1302,14 +1268,14 @@ local function on_myquests(key, solves, last, desc, max, delay)
   mq.lines = mq.run_lines
   local d = (desc and #desc > 0) and string.sub(desc, 1, 120) or nil
   QALL[key] = {s = solves, t = last, m = max, d = delay, desc = d, r = mq.run}
-  local known = BASE[key] or BY_DONE[key] or CAT_BY_FLAG[key] or db.tasks[key]
+  local known = guard.FLAG[key] or DONE_OWNER[key] or BASE[key] or BY_DONE[key] or CAT_BY_FLAG[key] or db.tasks[key]
   if not known and not is_kill_key(key) then return end
   local q = st.q[key] or {}
   q.s, q.t, q.m, q.d, q.r = solves, last, max, delay, mq.run
   if d then q.desc = d end
   st.q[key] = q
   -- An unknown kill counter (not a timer/completion flag) becomes a task in the Other area.
-  if not BASE[key] and not BY_DONE[key] and not CAT_BY_FLAG[key] and not db.tasks[key] and flag_role(key) == "counter" then
+  if not known and flag_role(key) == "counter" then
     db.tasks[key] = {name = d and string.sub(d, 1, 60) or key, area = "Other",
       mobs = {}, goal = (max and max > 0) and max or nil, key = key, custom = true, srv = my_server}
     mark_db(); need_rebuild = true
@@ -1320,7 +1286,7 @@ local function on_myquests(key, solves, last, desc, max, delay)
     st.prog[owner] = nil; st.cd[owner] = nil
   end
   -- A progress message is newer than a counter flag only if it came later.
-  local id = (BASE[key] and key) or BY_DONE[key] or CAT_BY_FLAG[key] or (db.tasks[key] and key)
+  local id = guard.FLAG[key] or BY_DONE[key] or DONE_OWNER[key] or CAT_BY_FLAG[key] or (db.tasks[key] and key)
   ids_cache = nil
   if id and st.prog[id] and st.prog[id].at and last and last > st.prog[id].at then st.prog[id] = nil end
   dirty = true
@@ -1350,14 +1316,14 @@ local function on_stamp(key)
       end
     end
   end
-  local counter_of = (BASE[key] and key) or (CAT_BY_FLAG[key] and CAT[CAT_BY_FLAG[key]] and CAT[CAT_BY_FLAG[key]].key == key and CAT_BY_FLAG[key]) or (db.tasks[key] and key)
+  local counter_of = guard.FLAG[key] or (BASE[key] and key) or (CAT_BY_FLAG[key] and CAT[CAT_BY_FLAG[key]] and CAT[CAT_BY_FLAG[key]].key == key and CAT_BY_FLAG[key]) or (db.tasks[key] and key)
   if owner or counter_of or is_kill_key(key) then st.q[key] = {s = e.s, t = e.t, m = e.m, d = e.d, desc = e.desc} end
   if owner then
     local t = task(owner)
     st.prog[owner] = nil
     st.done_at[owner] = unix_now
     if not (e.d and e.d > 0) then st.cd[owner] = (unix_now or 0) + (t.cd_h or tonumber(opt("cooldown_hours")) or 20) * 3600 end
-    note(display(t) .. ": turned in (quest stamp " .. key .. ")")
+    note(display(t) .. ": turned in (quest stamp " .. key .. ")"); guard.confirm_read()
   end
   ids_cache = nil; dirty = true
 end
@@ -1392,12 +1358,8 @@ local function quest_line(txt)
   end
 end
 
-local function process_line(item, objects_near)
+local function process_line(item)
   local txt, sender = item.txt, item.sender
-  -- Chat from before the tracker started (the client replays this login's chat
-  -- to a newly started plugin) is old news: the saved quest list and a fresh
-  -- read are the basis instead.
-  if item.hist then return end
   if sender == "" then
     if contains(txt, " solves (") then quest_line(txt)
     elseif contains(txt, "stamped") then
@@ -1406,7 +1368,7 @@ local function process_line(item, objects_near)
     elseif contains(txt, "killed") then
       kill_line(txt)
     elseif (contains(txt, "You've earned") or contains(txt, "You have earned")) and contains(txt, "experience") then
-      on_turn_in(item.use, item.calm)
+      on_turn_in(item.use)
     elseif item.use and contains(txt, "of these") and contains(txt, "Destroy") then
       local m = regexmatch(txt, START_RE)
       if m then guard.after_use(item.use, function(o) on_task_start(o.name, math.floor(o.wcid or 0), m["2"], tonumber(m["1"])) end) end
@@ -1434,83 +1396,63 @@ local function process_line(item, objects_near)
   end
 end
 
--- System lines worth queueing (everything else is dropped on arrival).
-local SYS_WORDS = {" solves (", "stamped", "killed", "You've earned", "You have earned", "of these", "again in", "myquests", "Quest list is empty"}
-local function relevant(txt)
-  for _, w in ipairs(SYS_WORDS) do if string.contains(txt, w) then return true end end
-  return false
-end
-
-local function drain(objects_near, max, budgeted)
+local function drain(max, budgeted)
   local done = 0
   while queue_head <= queue_tail and done < max do
     if budgeted and not workavailable() then break end
     local item = chat_queue[queue_head]
     chat_queue[queue_head] = nil; queue_head = queue_head + 1; done = done + 1
-    process_line(item, objects_near)
+    process_line(item)
   end
   if queue_head > queue_tail then chat_queue, queue_head, queue_tail = {}, 1, 0 end
   return done
 end
 
--- Which NPC was selected (and within reach) at each recent callback, so a reward
--- that is delivered a few callbacks late still finds the NPC you used.
-local sel_hist = {}
-local function used_at(time)
-  local best
-  for _, h in ipairs(sel_hist) do if h.t <= time + 0.01 then best = h end end
-  return best and best.npc or nil
-end
-local function read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
-  sel_hist[#sel_hist + 1] = {t = tick_now, npc = use_npc}
-  if #sel_hist > 40 then table.remove(sel_hist, 1) end
+-- 5.0.0: the client delivers only the lines plugin.json subscribes to
+-- ("chat_subscriptions": quest-list rows, kill counts, stamps, experience,
+-- "Destroy N of these", "again in" and /myquests replies from the server, and
+-- NPC/vendor speech), starting at the newest line ("chat_history": false), so
+-- nothing waits behind other chat or a replay after a Refresh. Each line says
+-- who sent it (sender_type): only server lines and the NPC you just used count.
+local function read_chat(s)
   chat_left = tonumber(s.chat_pending) or 0
   if s.chat_gap or (tonumber(s.chat_dropped) or 0) > 0 then
     mq.gap_at = tick_now
     if mq.active then mq.run_gap = true end
     mq.gap = true
   end
+  local used = guard.used_npc(10)
   for _, e in ipairs(s.chat_events or {}) do
     local txt = e.raw_text or e.text or ""
-    local hist = hist_serial and tonumber(e.serial) and tonumber(e.serial) <= hist_serial or nil
+    local kind = e.sender_type
     if #txt > 0 and #txt <= 4096 then
-      if e.sender == "" or e.sender == nil then
+      if kind == "server" or (kind == nil and (e.sender == "" or e.sender == nil)) then
         if queued() >= QUEUE_MAX then
           mq.gap_at = tick_now; if mq.active then mq.run_gap = true end
-        elseif relevant(txt) then
-          local used = use_npc
-          if tonumber(e.time) and tonumber(e.time) < tick_now - 0.4 then used = used_at(tonumber(e.time)) end
-          local item = {txt = txt, sender = "", ctx = (not hist) and ctx_npc or nil, use = (not hist) and used or nil, calm = calm, hist = hist}
+        else
+          local item = {txt = txt, sender = "", use = used}
           -- Quest-list lines can come in hundreds and wait their turn; everything
           -- else (kill counts, rewards, stamps) is handled the moment it arrives.
-          if contains(txt, " solves (") then enqueue(item)
-          else
-            process_line(item, objects_near)
-          end
+          if contains(txt, " solves (") then enqueue(item) else process_line(item) end
         end
-      elseif type(e.sender) == "string" and not hist then
-        -- Only trust tells from a nearby non-player object (an NPC), never players.
-        -- Only the NPC you have selected (and are using) is the speaker; a tell
-        -- from any other NPC is ignored, so a shared name can't mislead.
-        local o = (use_npc and string.lower(use_npc.name) == string.lower(e.sender)) and use_npc or nil
-        if o then
-          if npc_told_n > 200 then npc_told, npc_told_n = {}, 0 end
-          if not npc_told[o.id] then npc_told_n = npc_told_n + 1 end
-          npc_told[o.id] = tick_now
-        end
-        if o then
-          local r = recent_tells[o.id]
-          if not r or tick_now - r.at > 3 then r = {at = tick_now, lines = {}}; recent_tells[o.id] = r end
-          r.at = tick_now
-          if #r.lines < 8 then r.lines[#r.lines + 1] = txt end
-          if pickup and pickup.npc.id == o.id and #pickup.tells < 8 then pickup.tells[#pickup.tells + 1] = txt end
-          if not has_action_serial and use_npc and o.id == use_npc.id then begin_pickup(o) end
-          process_line({txt = txt, sender = e.sender, npc = {name = o.name, wcid = math.floor(o.wcid or 0)}}, objects_near)
-        end
+      elseif (kind == "npc" or kind == "vendor") and used and type(e.sender) == "string"
+        and string.lower(e.sender) == string.lower(used.name) then
+        -- Only the NPC you just used is listened to; a tell from any other NPC
+        -- (or a player) is ignored, so a shared name can't mislead.
+        local o = used
+        if npc_told_n > 200 then npc_told, npc_told_n = {}, 0 end
+        if not npc_told[o.id] then npc_told_n = npc_told_n + 1 end
+        npc_told[o.id] = tick_now
+        local r = recent_tells[o.id]
+        if not r or tick_now - r.at > 3 then r = {at = tick_now, lines = {}}; recent_tells[o.id] = r end
+        r.at = tick_now
+        if #r.lines < 8 then r.lines[#r.lines + 1] = txt end
+        if pickup and pickup.npc.id == o.id and #pickup.tells < 8 then pickup.tells[#pickup.tells + 1] = txt end
+        process_line({txt = txt, sender = e.sender, npc = {name = o.name, wcid = o.wcid}})
       end
     end
   end
-  drain(objects_near, 40, false)
+  drain(40, false)
 end
 
 ---------------------------------------------------------------------------
@@ -1577,7 +1519,7 @@ local function on_quest_file(data)
         e = {s = tonumber(v.s) or 0, t = tonumber(v.t) or 0, m = tonumber(v.m), d = tonumber(v.d), desc = v.x}
         QALL[k] = e
       elseif not e.desc then e.desc = v.x end
-      local known = BASE[k] or BY_DONE[k] or CAT_BY_FLAG[k] or db.tasks[k]
+      local known = guard.FLAG[k] or DONE_OWNER[k] or BASE[k] or BY_DONE[k] or CAT_BY_FLAG[k] or db.tasks[k]
       if (known or is_kill_key(k)) and not st.q[k] then
         st.q[k] = {s = e.s, t = e.t, m = e.m, d = e.d, desc = e.desc}; dirty = true
       elseif st.q[k] and not st.q[k].desc then st.q[k].desc = e.desc end
@@ -1851,10 +1793,52 @@ end
 -- Forms: `edraft` edits one listed task in place (its Edit button); `draft`
 -- is the new-task form under Manage > Add.
 local edit_id, edraft = nil, {}
+-- 5.0.0: the edit menu shows both quest flags. Known tasks fill them in from
+-- the built-in data and catalog; otherwise from your quest list: a kill
+-- counter whose description names the task's monster, and the completion flag
+-- sharing the counter's name (busydoorkillcount -> busydoorkilltask).
+function guard.suggest(id)
+  local t = task(id)
+  local key, done = t.key, t.done
+  -- Candidates are the (cached) kill-like flags offered in the pickers.
+  local flags = guard.flag_lists()
+  if not key and t.mobs and #t.mobs > 0 then
+    for i = 2, #flags.k do
+      local k = flags.k[i]
+      local q = QALL[k]
+      if not guard.FLAG[k] and not DONE_OWNER[k] and q and q.desc then
+        local d = string.lower(q.desc)
+        for _, m in ipairs(t.mobs) do if #m >= 4 and contains(d, m) then key = k; break end end
+        if key then break end
+      end
+    end
+  end
+  if key and not done then
+    local stem = key
+    for _, suf in ipairs({"killcounter", "killcount", "counter", "count", "kills"}) do
+      if #stem > #suf and string.sub(stem, -#suf) == suf then stem = string.sub(stem, 1, #stem - #suf); break end
+    end
+    if #stem >= 5 then
+      for i = 2, #flags.d do
+        local k = flags.d[i]
+        if string.sub(k, 1, #stem) == stem and not DONE_OWNER[k] then done = k; break end
+      end
+    end
+  end
+  return key or "", done or ""
+end
 local function form_from(id)
   local t = task(id)
+  local key, done = guard.suggest(id)
   return {id = id, name = t.name or "", mobs = join_mobs(t.mobs), goal = t.goal and tostring(int(t.goal)) or "",
-    npc = t.npc or "", area = area_of(t), cd = t.cd_h and tostring(int(t.cd_h) == t.cd_h and int(t.cd_h) or t.cd_h) or ""}
+    npc = t.npc or "", area = area_of(t), cd = t.cd_h and tostring(int(t.cd_h) == t.cd_h and int(t.cd_h) or t.cd_h) or "",
+    key = key, done = done}
+end
+-- A quest flag as typed: lower case, no spaces; "" when blank.
+function guard.flag_text(v)
+  local f = string.lower(trim(tostring(v or "")))
+  if #f > 80 or contains(f, " ") then return nil end
+  return f
 end
 -- Saves a form; returns the task id, or nil (with a note) when something is missing.
 local function save_form(f)
@@ -1863,10 +1847,19 @@ local function save_form(f)
   for _, m in ipairs(split_commas(f.mobs or "")) do for _, x in ipairs(singulars(m)) do mobs[#mobs + 1] = x end end
   local npc = trim(f.npc or "")
   local goal, cd = tonumber(f.goal), tonumber(f.cd)
+  local key, done = guard.flag_text(f.key), guard.flag_text(f.done)
+  if not key or not done then note("Quest flags are one word, up to 80 characters"); return nil end
   local id = f.id
+  local new_id = (not id) and ("c_" .. slug(name)) or nil
+  -- A flag can belong to one task only.
+  for _, k in ipairs({key, done}) do
+    local owner = k ~= "" and (guard.FLAG[k] or DONE_OWNER[k])
+    if owner and owner ~= (id or new_id) then note(k .. " already belongs to " .. display(task(owner))); return nil end
+  end
+  if key ~= "" and key == done then note("The counter and completion flags must differ"); return nil end
   if not id then
     if #name == 0 or #mobs == 0 then note("Enter a name and at least one monster"); return nil end
-    id = "c_" .. slug(name)
+    id = new_id
     if #id <= 2 then note("Enter a name with letters or digits"); return nil end
     db.tasks[id] = {name = name, custom = true, srv = my_server}
   end
@@ -1878,7 +1871,22 @@ local function save_form(f)
   d.npc = (#npc > 0) and npc or nil
   d.area = AREA_SET[f.area or ""] and f.area or "Other"
   d.cd_h = cd
+  -- Flags: an override only where it differs from the built-in/catalog flag.
+  if b then
+    d.key = (key ~= "" and key ~= b.key) and key or nil
+    d.done = (done ~= "" and done ~= b.done) and done or nil
+  else
+    if key ~= "" then d.key = key end
+    d.done = (done ~= "") and done or nil
+  end
   mark_db(); rebuild_indexes()
+  -- The quest list already holds these flags: count them now.
+  local t = task(id)
+  for _, k in ipairs({t.key, t.done}) do
+    local q = k and QALL[k]
+    if q and not st.q[k] then st.q[k] = {s = q.s, t = q.t, m = q.m, d = q.d, desc = q.desc, r = q.r} end
+  end
+  ids_cache = nil; dirty = true
   note("Saved " .. display(task(id)))
   return id
 end
@@ -1917,37 +1925,30 @@ end
 ---------------------------------------------------------------------------
 -- UI events
 ---------------------------------------------------------------------------
+-- The form behind an edit-menu control: "ie" (E), "ed" (Manage > Add) or
+-- "d1".."d5" (the Detected page's slots).
+function guard.form_of(pfx)
+  if pfx == "ie" then return edit_id and edraft or nil end
+  if pfx == "ed" then return draft end
+  local n = string.sub(pfx, 1, 1) == "d" and tonumber(string.sub(pfx, 2))
+  local tid = n and guard.DSLOT[n]
+  if not tid then return nil end
+  fill[tid] = fill[tid] or form_from(tid)
+  return fill[tid], tid
+end
 local function handle_events(s, now)
   for _, e in ipairs(s.events or {}) do
     local id = type(e.id) == "string" and e.id or ""
+    local cut = string.contains(id, "_") and regexmatch(id, "^([a-z0-9]+)_([a-z]+)$")
+    local pfx, field = cut and cut["1"], cut and cut["2"]
     if e.type == "click" then
-      if string.sub(id, 1, 5) == "chat|" then show_in_chat(string.sub(id, 6))
-      elseif string.sub(id, 1, 3) == "fr|" and FILL_IDS[id] then
-        -- Remove from Detected: a task made from a kill message is deleted; one
-        -- from your quest list (it would come back with the next read), a
-        -- built-in or a catalog task just stops being listed there.
-        local tid = FILL_IDS[id]
-        local d = db.tasks[tid]
-        fill[tid] = nil
-        if d and d.custom and not d.key then delete_task(tid)
-        else db_task(tid).nofill = true; mark_db(); note("Removed " .. display(task(tid)) .. " from Detected") end
-      elseif string.sub(id, 1, 3) == "fs|" and FILL_IDS[id] then
-        local tid = FILL_IDS[id]
-        local f = fill[tid] or {}
-        local d = db_task(tid)
-        if f.mobs then
-          local mobs = {}
-          for _, m in ipairs(split_commas(f.mobs)) do for _, x in ipairs(singulars(m)) do mobs[#mobs + 1] = x end end
-          d.mobs = (#mobs > 0) and mobs or nil
-        end
-        if f.npc then local n = trim(f.npc); d.npc = (#n > 0) and n or nil end
-        fill[tid] = nil
-        mark_db(); rebuild_indexes()
-        note("Saved " .. display(task(tid)))
+      if string.sub(id, 1, 4) == "bar|" and guard.BAR[id] then show_in_chat(guard.BAR[id])
       elseif SEL_IDS[id] then
         local target = SEL_TARGET[SEL_IDS[id]]
         if target then pending_select = target else note("None in range") end
-      elseif EDIT_IDS[id] then edit_id = EDIT_IDS[id]; edraft = form_from(edit_id)
+      elseif EDIT_IDS[id] then
+        -- E opens this task's edit menu under its bar; E again closes it.
+        if edit_id == EDIT_IDS[id] then edit_id = nil else edit_id = EDIT_IDS[id]; edraft = form_from(edit_id) end
       elseif id == "ie_save" and edit_id then
         edraft.id = edit_id
         if save_form(edraft) then edit_id = nil end
@@ -1957,38 +1958,48 @@ local function handle_events(s, now)
       elseif id == "ed_save" then
         draft.id = nil
         if save_form(draft) then draft = {area = draft.area or "Other"} end
+      elseif id == "dp_prev" then guard.dpage = math.max(1, (guard.dpage or 1) - 1)
+      elseif id == "dp_next" then guard.dpage = (guard.dpage or 1) + 1
+      elseif pfx and (field == "save" or field == "rm") and string.sub(pfx, 1, 1) == "d" then
+        local f, tid = guard.form_of(pfx)
+        if tid and field == "save" then
+          f.id = tid
+          if save_form(f) then fill[tid] = nil end
+        elseif tid then
+          -- Remove from Detected: a task made from a kill message is deleted; one
+          -- from your quest list (it would come back with the next read), a
+          -- built-in or a catalog task just stops being listed there.
+          local d = db.tasks[tid]
+          fill[tid] = nil
+          if d and d.custom and not d.key then delete_task(tid)
+          else db_task(tid).nofill = true; mark_db(); note("Removed " .. display(task(tid)) .. " from Detected") end
+        end
       elseif id == "na_add" then add_area(new_area); new_area = ""
       elseif AREA_IDS[id] then remove_area(AREA_IDS[id])
       end
       if e.ok == false and e.error and #e.error > 0 then note(e.error) end
     elseif e.type == "change" then
       local v = e.value
+      local f = pfx and guard.form_of(pfx)
       if id == "view" then st.opt.view = v; dirty = true
-      elseif (id == "ed_pick" or id == "ie_pick" or (string.sub(id, 1, 3) == "fp|" and FILL_IDS[id])) and v == PICK_REFRESH then
-        -- Giver pickers are filled only on request: the NPCs within 30 m now, sorted.
-        local names, seen = {}, {}
-        for _, o in ipairs(s.objects or {}) do
-          if (tonumber(o.distance) or 1e9) > 30 then break end  -- nearest first
-          if type(o.name) == "string" and not o.monster and not o.player and not o.corpse and not seen[o.name] and #names < 24 then
-            seen[o.name] = true; names[#names + 1] = o.name
+      elseif f and field == "pick" then
+        if v == PICK_REFRESH then
+          -- Giver pickers are filled only on request: the NPCs within 30 m now, sorted.
+          local names, seen = {}, {}
+          for _, o in ipairs(s.objects or {}) do
+            if (tonumber(o.distance) or 1e9) > 30 then break end  -- nearest first
+            if type(o.name) == "string" and not o.monster and not o.player and not o.corpse and not seen[o.name] and #names < 24 then
+              seen[o.name] = true; names[#names + 1] = o.name
+            end
           end
-        end
-        table.sort(names)
-        picker_names = names
-        if #names == 0 then note("No NPCs within 30 m") end
-      elseif string.sub(id, 1, 3) == "fp|" and FILL_IDS[id] and v and v ~= PICK_HINT then
-        local tid = FILL_IDS[id]
-        fill[tid] = fill[tid] or {}
-        fill[tid].npc = tostring(v)
-      elseif id == "ed_pick" and v and v ~= PICK_HINT then draft.npc = tostring(v)
-      elseif id == "ie_pick" and v and v ~= PICK_HINT then edraft.npc = tostring(v)
-      elseif string.sub(id, 1, 3) == "ie_" then edraft[string.sub(id, 4)] = v
+          table.sort(names)
+          picker_names = names
+          if #names == 0 then note("No NPCs within 30 m") end
+        elseif v and v ~= PICK_HINT then f.npc = tostring(v) end
+      elseif f and (field == "kpick" or field == "dpick") then
+        if v and v ~= guard.FLAG_HINT then f[field == "kpick" and "key" or "done"] = tostring(v) end
+      elseif f and field then f[field] = v
       elseif id == "na_name" then new_area = tostring(v or "")
-      elseif (string.sub(id, 1, 3) == "fm|" or string.sub(id, 1, 3) == "fn|") and FILL_IDS[id] then
-        local tid = FILL_IDS[id]
-        fill[tid] = fill[tid] or {}
-        fill[tid][string.sub(id, 1, 2) == "fm" and "mobs" or "npc"] = tostring(v or "")
-      elseif string.sub(id, 1, 3) == "ed_" then draft[string.sub(id, 4)] = v
       elseif string.sub(id, 1, 4) == "opt|" then st.opt[string.sub(id, 5)] = v; dirty = true
         if id == "opt|myq_hide" and v == false then guard.clear_filters = true end
         if id == "opt|show_nav" and v == false and nav.id ~= 0 then
@@ -1996,6 +2007,7 @@ local function handle_events(s, now)
           nav.id, nav.pos = 0, nil
         end
       end
+    elseif e.type == "use" then guard.on_use(e, s)
     elseif e.type == "command" then
       local t = string.lower(trim(e.text or ""))
       if t == "reset" then st.prog, st.cd, st.npc_cd, st.q, st.done_at = {}, {}, {}, {}, {}; ids_cache = nil; dirty = true; note("Progress cleared")
@@ -2100,9 +2112,54 @@ function guard.marker_key(markers)
   return table.concat(k, ",")
 end
 
+-- 5.0.0: one edit menu everywhere (E, Detected, Manage > Add).
+-- The flag lists change only when a quest-list read ends or the quest file
+-- loads, so they are worked out then and reused by every window build.
+function guard.flag_lists()
+  local sig = tostring(mq.done_unix) .. "|" .. tostring(qfile.phase)
+  if guard.flags and guard.flags_sig == sig then return guard.flags end
+  local k, d = {}, {}
+  -- One native pattern test per flag keeps this light on long quest lists.
+  for key, q in pairs(QALL) do
+    local kill = regexmatch(key, "kill|slay|cull")
+    if kill or (q.m and q.m > 1) then
+      local role = flag_role(key)
+      if role == "counter" then k[#k + 1] = key
+      elseif role == "done" and kill then d[#d + 1] = key end
+    end
+  end
+  table.sort(k); table.sort(d)
+  local K, D = {guard.FLAG_HINT}, {guard.FLAG_HINT}
+  for i = 1, math.min(#k, 120) do K[#K + 1] = k[i] end
+  for i = 1, math.min(#d, 120) do D[#D + 1] = d[i] end
+  guard.flags, guard.flags_sig = {k = K, d = D}, sig
+  return guard.flags
+end
+function guard.editor(pfx, f, picker, flags)
+  local B = TXT.body
+  return {
+    {id = pfx .. "_name", type = "input", size = B, text = "Name", value = f.name or ""},
+    {id = pfx .. "_mobs", type = "input", size = B, text = "Monster name(s), comma separated", value = f.mobs or ""},
+    {id = pfx .. "_npc", type = "input", size = B, text = "Quest giver", value = f.npc or ""},
+    {id = pfx .. "_pick", type = "select", size = B, text = "...or pick a nearby NPC", value = picker[1], options = picker},
+    {id = pfx .. "_goal", type = "input", size = B, text = "Kills required", value = f.goal or ""},
+    {id = pfx .. "_cd", type = "input", size = B, text = "Cooldown hours (blank = default)", value = f.cd or ""},
+    {id = pfx .. "_area", type = "select", size = B, text = "Area", value = AREA_SET[f.area or ""] and f.area or "Other", options = AREAS},
+    {id = pfx .. "_key", type = "input", size = B, text = "Counter quest flag", value = f.key or "",
+      tooltip = "The quest flag that counts your kills (from /myquests)"},
+    {id = pfx .. "_kpick", type = "select", size = B, text = "...or pick from your quest list", value = flags.k[1], options = flags.k},
+    {id = pfx .. "_done", type = "input", size = B, text = "Completion quest flag", value = f.done or "",
+      tooltip = "The quest flag stamped when you turn the task in (from /myquests)"},
+    {id = pfx .. "_dpick", type = "select", size = B, text = "...or pick from your quest list", value = flags.d[1], options = flags.d}}
+end
+-- Each task's bar: fill and label color by state (soft fills keep the label readable).
+guard.BAR_FILL = {active = "#D9D9D955", turnin = "#2E7D3299", available = "#00000000", cooldown = "#00000000"}
+guard.BAR_TEXT = {active = "white", turnin = "green", available = "yellow", cooldown = "red"}
+
 local function build(s)
   local ui = {}
-  EDIT_IDS, AREA_IDS, SEL_IDS = {}, {}, {}
+  EDIT_IDS, AREA_IDS, SEL_IDS, guard.BAR = {}, {}, {}, {}
+  local flags = guard.flag_lists()
   local view = opt("view")
 
   -- Status, name and area of every task once (sorting must not call task()).
@@ -2151,47 +2208,36 @@ local function build(s)
     end
     shown = shown + 1
     local t, i = task(id), info[id]
-    local head, color = display(t), nil
+    -- 5.0.0: one bar per task (name and progress), clickable for the details in
+    -- chat, with S (Select) and E (Edit) beside it.
+    local label, frac = display(t), 0
+    local g = i.p and i.p.g and i.p.g > 0 and i.p.g or nil
     if i.status == "active" then
-      local g = i.p.g and i.p.g > 0 and i.p.g or nil
-      head = head .. "  " .. i.p.n .. (g and ("/" .. g) or "")
-    elseif i.status == "turnin" then color = "green"
-    elseif i.status == "cooldown" then head = head .. "  " .. dur(i.left); color = "red"
-    else color = "yellow" end
-    local body = {}
-    if i.status == "active" and i.p.g and i.p.g > 0 then
-      body[#body + 1] = {id = uid("p|", id), type = "progress", size = TXT.body, value = math.min(1, i.p.n / i.p.g), color = "green",
-        text = i.p.n .. " / " .. i.p.g .. "  (" .. math.max(0, i.p.g - i.p.n) .. " left)"}
-    end
+      label = label .. "  " .. i.p.n .. (g and (" / " .. g) or "")
+      frac = g and math.min(1, i.p.n / g) or 0
+    elseif i.status == "turnin" then
+      if g then label = label .. "  " .. i.p.n .. " / " .. g end
+      frac = 1
+    elseif i.status == "cooldown" then label = label .. "  " .. dur(i.left) end
+    local bid, sb, eb = uid("bar|", id), uid("sel|", id), uid("edit|", id)
+    guard.BAR[bid], SEL_IDS[sb], EDIT_IDS[eb] = id, id, id
+    ui[#ui + 1] = {id = uid("r|", id), type = "row", children = {
+      {id = bid, type = "progress", size = TXT.body, value = frac, text = label, color = guard.BAR_FILL[i.status], text_color = guard.BAR_TEXT[i.status],
+        clickable = true, tooltip = label .. " - click for details in chat"},
+      {id = sb, type = "button", size = TXT.body, text = "S", auto_width = true,
+        tooltip = (i.status == "active") and "Select the nearest monster" or "Select the quest giver"},
+      {id = eb, type = "button", size = TXT.body, text = "E", auto_width = true, tooltip = "Edit this task"}}}
     if edit_id == id then
-      -- Edit in place: the fields of this task, saved to the task database.
-      local f = edraft
+      -- Edit in place, under the bar: the fields of this task, saved to the task database.
       local is_custom = db.tasks[id] and db.tasks[id].custom
       local ebtn = {{id = "ie_save", type = "button", size = TXT.body, text = "Save"}, {id = "ie_cancel", type = "button", size = TXT.body, text = "Cancel"},
         {id = "ie_reset", type = "button", size = TXT.body, text = "Reset progress", tooltip = "Clear this task's kill count and timer for this character"}}
       if is_custom then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", size = TXT.body, text = "Delete"}
       elseif db.tasks[id] then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", size = TXT.body, text = "Undo my changes"} end
-      body[#body + 1] = {id = "ie_name", type = "input", size = TXT.body, text = "Name", value = f.name or ""}
-      body[#body + 1] = {id = "ie_mobs", type = "input", size = TXT.body, text = "Monster name(s), comma separated", value = f.mobs or ""}
-      body[#body + 1] = {id = "ie_npc", type = "input", size = TXT.body, text = "Quest giver", value = f.npc or ""}
-      body[#body + 1] = {id = "ie_pick", type = "select", size = TXT.body, text = "...or pick a nearby NPC", value = picker[1], options = picker}
-      body[#body + 1] = {id = "ie_goal", type = "input", size = TXT.body, text = "Kills required", value = f.goal or ""}
-      body[#body + 1] = {id = "ie_cd", type = "input", size = TXT.body, text = "Cooldown hours (blank = default)", value = f.cd or ""}
-      body[#body + 1] = {id = "ie_area", type = "select", size = TXT.body, text = "Area", value = AREA_SET[f.area or ""] and f.area or "Other", options = AREAS}
+      local body = guard.editor("ie", edraft, picker, flags)
       body[#body + 1] = {id = "ie_btns", type = "row", children = ebtn}
-    else
-    -- Details (giver, location, flags) are under Chat, not in the window.
-    -- Select: a fixed button; the nearest monster (or the giver) is looked up
-    -- when clicked, so the window doesn't change as things move.
-    local sb = uid("sel|", id); SEL_IDS[sb] = id
-    local buttons = {{id = sb, type = "button", size = TXT.body, text = "Select",
-      tooltip = (i.status == "active") and "Select the nearest monster" or "Select the quest giver"}}
-    buttons[#buttons + 1] = {id = uid("chat|", id), type = "button", size = TXT.body, text = "Chat", tooltip = "Show this task's details in your chat (only you see them)"}
-    local eb = uid("edit|", id); EDIT_IDS[eb] = id
-    buttons[#buttons + 1] = {id = eb, type = "button", size = TXT.body, text = "Edit", tooltip = "Change this task's monsters, quest giver, kills, cooldown or area"}
-    body[#body + 1] = {id = uid("b|", id), type = "row", children = buttons}
+      ui[#ui + 1] = {id = "ie_box", type = "column", children = body}
     end
-    ui[#ui + 1] = {id = uid("t|", id), type = "section", size = TXT.body, text = head, color = color, expanded = false, children = body}
   end
   if shown == 0 then
     ui[#ui + 1] = {id = "empty", type = "text", size = TXT.body, text = (view == "Active") and "No kill tasks in progress." or "No tasks here yet."}
@@ -2200,28 +2246,22 @@ local function build(s)
   if s.error and s.error ~= "" then ui[#ui + 1] = {id = "err", type = "text", size = TXT.body, color = "red", text = string.sub(s.error, 1, 200)} end
 
   -- Manage > Add: a new task, and areas of your own.
-  local editor = {
-    {id = "ed_head", type = "text", size = TXT.body, text = "New task", bold = true},
-    {id = "ed_name", type = "input", size = TXT.body, text = "Name", value = draft.name or ""},
-    {id = "ed_mobs", type = "input", size = TXT.body, text = "Monster name(s), comma separated", value = draft.mobs or ""},
-    {id = "ed_npc", type = "input", size = TXT.body, text = "Quest giver", value = draft.npc or ""},
-    {id = "ed_goal", type = "input", size = TXT.body, text = "Kills required", value = draft.goal or ""},
-    {id = "ed_cd", type = "input", size = TXT.body, text = "Cooldown hours (blank = default)", value = draft.cd or ""},
-    {id = "ed_area", type = "select", size = TXT.body, text = "Area", value = AREA_SET[draft.area or ""] and draft.area or "Other", options = AREAS},
-    {id = "ed_save", type = "button", size = TXT.body, text = "Add task"},
-    {id = "na_head", type = "text", size = TXT.body, text = "Areas", bold = true},
-    {id = "na_row", type = "row", children = {
-      {id = "na_name", type = "input", size = TXT.body, text = "New area", value = new_area},
-      {id = "na_add", type = "button", size = TXT.body, text = "Add area"}}}}
-  table.insert(editor, 5, {id = "ed_pick", type = "select", size = TXT.body, text = "...or pick a nearby NPC", value = picker[1], options = picker})
+  local editor = {{id = "ed_head", type = "text", size = TXT.body, text = "New task", bold = true}}
+  for _, c in ipairs(guard.editor("ed", draft, picker, flags)) do editor[#editor + 1] = c end
+  editor[#editor + 1] = {id = "ed_save", type = "button", size = TXT.body, text = "Add task"}
+  editor[#editor + 1] = {id = "na_head", type = "text", size = TXT.body, text = "Areas", bold = true}
+  editor[#editor + 1] = {id = "na_row", type = "row", children = {
+    {id = "na_name", type = "input", size = TXT.body, text = "New area", value = new_area},
+    {id = "na_add", type = "button", size = TXT.body, text = "Add area"}}}
   for k, a in ipairs(db.areas or {}) do
     local bid = "ar|" .. k
     AREA_IDS[bid] = a
     editor[#editor + 1] = {id = bid, type = "button", size = TXT.body, text = "Remove " .. a, tooltip = "Its tasks go back to their own area, or Other"}
   end
 
-  -- Detected: tasks found in your quest list or chat that still miss a monster or quest giver.
-  FILL_IDS = {}
+  -- Detected: tasks found in your quest list or chat that still miss a monster
+  -- or quest giver. 5.0.0: each is a closed drop-down holding the full edit
+  -- menu, 5 per page (a window holds at most 256 controls).
   local detected, dkeys, dmap = {}, {}, {}
   for _, id in ipairs(all_ids()) do
     local t, d = task(id), db.tasks[id]
@@ -2232,27 +2272,35 @@ local function build(s)
     end
   end
   table.sort(dkeys)
-  for n, k in ipairs(dkeys) do
-    if n > 8 then detected[#detected + 1] = {id = "fmore", type = "text", size = TXT.body, text = (#dkeys - 8) .. " more"}; break end
-    local id = dmap[k]
-    local t = task(id)
+  local per = 5
+  local dpages = math.max(1, math.ceil(#dkeys / per))
+  guard.dpage = math.max(1, math.min(guard.dpage or 1, dpages))
+  guard.DSLOT = {}
+  local WORD = {active = "in progress", turnin = "ready to turn in", cooldown = "on cooldown", available = "available"}
+  for n = 1, per do
+    local k = dkeys[(guard.dpage - 1) * per + n]
+    if not k then break end
+    local tid = dmap[k]
+    guard.DSLOT[n] = tid
+    local t = task(tid)
+    fill[tid] = fill[tid] or form_from(tid)
+    local pfx = "d" .. n
+    local body = guard.editor(pfx, fill[tid], picker, flags)
     local q = t.key and (st.q[t.key] or QALL[t.key])
-    local f = fill[id] or {}
-    local fm, fn, fs = uid("fm|", id), uid("fn|", id), uid("fs|", id)
-    FILL_IDS[fm], FILL_IDS[fn], FILL_IDS[fs] = id, id, id
-    local word = ({active = "in progress", turnin = "ready to turn in", cooldown = "on cooldown", available = "available"})[info[id].status]
-    local col = {
-      {id = uid("fh|", id), type = "text", size = TXT.body, bold = true, text = info[id].name .. " - " .. word},
-      {id = fm, type = "input", size = TXT.body, text = "Monster name(s), comma separated", value = f.mobs or join_mobs(t.mobs)},
-      {id = fn, type = "input", size = TXT.body, text = "Quest giver", value = f.npc or t.npc or ""}}
-    local fp = uid("fp|", id); FILL_IDS[fp] = id
-    col[#col + 1] = {id = fp, type = "select", size = TXT.body, text = "...or pick a nearby NPC", value = picker[1], options = picker}
-    local fr = uid("fr|", id); FILL_IDS[fr] = id
-    col[#col + 1] = {id = uid("fb|", id), type = "row", children = {
-      {id = fs, type = "button", size = TXT.body, text = "Save"},
-      {id = fr, type = "button", size = TXT.body, text = "Remove", tooltip = "Remove from Detected"}}}
-    if q and q.desc and q.desc ~= info[id].name then table.insert(col, 2, {id = uid("fd|", id), type = "text", size = TXT.small, text = t.key .. ": " .. q.desc}) end
-    detected[#detected + 1] = {id = uid("fx|", id), type = "column", children = col}
+    if q and q.desc and q.desc ~= info[tid].name then
+      table.insert(body, 1, {id = pfx .. "_desc", type = "text", size = TXT.small, text = t.key .. ": " .. q.desc})
+    end
+    body[#body + 1] = {id = pfx .. "_btns", type = "row", children = {
+      {id = pfx .. "_save", type = "button", size = TXT.body, text = "Save"},
+      {id = pfx .. "_rm", type = "button", size = TXT.body, text = "Remove", tooltip = "Remove from Detected"}}}
+    detected[#detected + 1] = {id = uid("dsec|", tid), type = "section", size = TXT.body,
+      text = info[tid].name .. " - " .. WORD[info[tid].status], expanded = false, children = body}
+  end
+  if dpages > 1 then
+    detected[#detected + 1] = {id = "dp", type = "row", children = {
+      {id = "dp_prev", type = "button", size = TXT.body, text = "<", auto_width = true, enabled = guard.dpage > 1},
+      {id = "dp_n", type = "text", size = TXT.body, text = guard.dpage .. " / " .. dpages},
+      {id = "dp_next", type = "button", size = TXT.body, text = ">", auto_width = true, enabled = guard.dpage < dpages}}}
   end
   if #detected == 0 then detected[1] = {id = "fnone", type = "text", size = TXT.body, text = "Nothing to fill in.",
     tooltip = "Kill tasks found in your quest list or in chat appear here when their monster or quest giver is unknown."} end
@@ -2294,7 +2342,7 @@ local function build(s)
     {id = "opt|cooldown_hours", type = "number", size = TXT.body, text = "Default cooldown after turn-in (hours)", min = 0, max = 168, step = 1, value = tonumber(opt("cooldown_hours")) or 20},
     colsel("col_available", "! color: available"), colsel("col_progress", "! color: in progress"),
     colsel("col_turnin", "! color: ready to turn in"), colsel("col_cooldown", "! color: on cooldown")}
-  ui[#ui + 1] = {id = "manage", type = "section", size = TXT.body, text = "Manage", expanded = false, children = {
+  ui[#ui + 1] = {id = "manage", type = "section", size = TXT.body, text = "Manage", expanded = false, hide_when_pinned = true, children = {
     {id = "mtabs", type = "tabs", children = {
       {id = "m_found", type = "column", text = "Detected" .. ((#dkeys > 0) and (" (" .. #dkeys .. ")") or ""), children = detected},
       {id = "m_tasks", type = "column", text = "Add", children = editor},
@@ -2392,7 +2440,6 @@ return function(s, p)
     if type(p.kt_db) == "table" then merge_db(p.kt_db); db_dirty = true; out.profile_patch = {kt_db = {}, kt_db_file = false} end
     for _, d in pairs(db.tasks) do if d.area == "Custom" then d.area = "Other" end end
     started_at = now
-    hist_serial = tonumber(s.chat_latest_serial)
     rebuild_indexes()
   end
   if need_rebuild then rebuild_indexes(); need_rebuild = false; guard.reindexed = true end
@@ -2404,8 +2451,7 @@ return function(s, p)
   local range = tonumber(opt("range")) or 150
   local scan = {monsters = {}, npcs = {}}
   my_x, my_y = global_xy(s.position)
-  local calm = true  -- no live monster within 30 m (an experience reward then isn't from a kill)
-  local objects_near, npc_names, others = {}, {}, {}
+  local others = {}
   guard.players = {}
   for _, o in ipairs(s.objects or {}) do if o.player and type(o.name) == "string" then guard.players[string.lower(o.name)] = true end end
   -- 4.17.10: the client labels each object (build 137 object_type); items,
@@ -2418,7 +2464,6 @@ return function(s, p)
       local d = o.distance or 1e9
       if o.monster then
         if not o.dead and d <= range then scan.monsters[#scan.monsters + 1] = o end
-        if not o.dead and d <= 30 then calm = false end
       elseif not o.corpse and d <= range then
         others[#others + 1] = o
       end
@@ -2431,43 +2476,7 @@ return function(s, p)
   if type(s.server) == "string" and #s.server > 0 then my_server = s.server end
   handle_results(s)
   handle_events(s, now)
-  -- Speaker for quest text that arrives as a system message: only the selected
-  -- non-monster object (never just whatever stands nearby, never a pet).
-  -- 4.17.4: the client's selection details (build 135) say what the object is;
-  -- only a creature or vendor can be a quest giver (chests, quest items and
-  -- portals send the same "You may complete this quest again" text).
-  local ctx_npc
-  local sel = s.selection
-  local npc_kind = type(sel) ~= "table" or sel.id ~= s.selected or sel.object_type == nil
-    or sel.object_type == "creature" or sel.object_type == "vendor"
-  if npc_kind and (tonumber(s.selected) or 0) ~= 0 then
-    for _, o in ipairs(s.objects or {}) do
-      if o.id == s.selected then
-        if not o.monster and not o.player and not o.corpse and type(o.name) == "string"
-           and (tonumber(o.distance) or 1e9) <= 15 and not guard.is_pet(o.name) then ctx_npc = o end
-        break
-      end
-    end
-  end
-  -- The NPC you just used: selected, not a monster or player, within reach.
-  local use_npc = ctx_npc and ctx_npc.id == s.selected and (tonumber(ctx_npc.distance) or 1e9) <= 6 and ctx_npc or nil
-  -- A finished action (UseDone) with that NPC selected: you used it.
-  local aser = tonumber(s.action_serial)
-  if aser then
-    has_action_serial = true
-    if last_action_serial and aser ~= last_action_serial and (tonumber(s.action_error) or 0) == 0 and use_npc then
-      if next(npc_used) and #used_ids > 200 then npc_used, used_ids = {}, {} end
-      if not npc_used[use_npc.id] then used_ids[#used_ids + 1] = use_npc.id end
-      npc_used[use_npc.id] = tick_now
-      local pd = guard.pending
-      if pd and pd.npc.id == use_npc.id and tick_now - pd.at <= 3 then guard.pending = nil; pd.fn(use_npc) end
-      begin_pickup(use_npc)
-      local pr = pending_reward
-      if pr and pr.npc.id == use_npc.id and tick_now - pr.at <= 10 then on_turn_in(pr.npc, false, true) end
-    end
-    last_action_serial = aser
-  end
-  read_chat(s, objects_near, npc_names, ctx_npc, use_npc, calm)
+  read_chat(s)
   if guard.pending and tick_now - guard.pending.at > 3 then guard.pending = nil end
   if pickup and tick_now - pickup.at >= 2 then resolve_pickup() end
   if next(recent_tells) then
@@ -2533,7 +2542,7 @@ return function(s, p)
   end
   -- Long bursts (a big quest list): keep reading with whatever budget is left;
   -- the window and saved state catch up next callback.
-  if queued() > 0 then drain(objects_near, 2000, true) end
+  if queued() > 0 then drain(2000, true) end
 
   if pending_select then
     out.action, out.target = "select", pending_select

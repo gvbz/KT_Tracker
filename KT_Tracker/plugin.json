@@ -4,7 +4,7 @@
   "id": "kt_tracker",
   "name": "Kill Task Tracker",
   "short_name": "KT",
-  "version": "4.17.11",
+  "version": "5.0.0",
   "description": "Kill-task tracker: tasks by area with your progress, quest-giver markers by state, green arrows and an auto NAV arrow to the closest task monster, and your quest list saved per character and server.",
   "presentation": {
     "title": "Kill Task Tracker",
@@ -15,7 +15,20 @@
   },
   "update_interval": 0.5,
   "snapshot_fields": ["chat_events", "chat_latest_serial", "chat_pending", "chat_gap", "chat_dropped",
-    "objects", "selected", "position", "selection", "character_name", "action_serial", "action_error"],
+    "objects", "position", "character_name"],
+  "chat_history": false,
+  "chat_subscriptions": [
+    {"id": "quest_list", "contains": " solves (", "sender_type": "server"},
+    {"id": "kills", "contains": "killed", "sender_type": "server"},
+    {"id": "stamps", "contains": "stamped", "sender_type": "server"},
+    {"id": "rewards", "contains": " experience", "sender_type": "server"},
+    {"id": "task_start", "contains": "of these", "sender_type": "server"},
+    {"id": "cooldowns", "contains": "again in", "sender_type": "server"},
+    {"id": "myquests", "contains": "myquests", "sender_type": "server"},
+    {"id": "quests_empty", "contains": "Quest list is empty", "sender_type": "server"},
+    {"id": "npcs", "sender_type": "npc"},
+    {"id": "vendors", "sender_type": "vendor"}
+  ],
   "permissions": [
     "chat",
     "chat_filter",
