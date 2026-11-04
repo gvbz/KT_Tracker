@@ -41,16 +41,16 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
 ### The window
 
 - **Show in NAV**: turns the green arrows over task monsters and NAV arrow integration on or off.
-- **Area list**: pick **Active** (tasks you are working on or can turn in), a specific hunting area, or **Other**. Newly detected quests that are uncategorized will be placed into **Other**.
+- **Area list**: pick a hunting area, one of your own areas, or **Other**. Newly detected quests that are uncategorized will be placed into **Other**.
 - **Task bars**: one progress bar per task, showing the task name and your kill count (e.g. `Devourer Marguls  6 / 15`). The label color shows the state:
   - white: in progress
   - green: ready to turn in (full bar)
   - yellow: available to pick up
   - red: on cooldown, with the time left
-  - Click a bar to show the task's details in your chat window (quest giver, location, kills needed, quest flags). Only you see these lines.
-- Beside each bar:
-  - **S** (Select): selects the nearest task monster, or the quest giver if you aren't working on the task.
-  - **E** (Edit): opens the task's edit menu under the bar: name, monsters, quest giver, kills required, cooldown, area and its two quest flags. You can also reset its progress, undo your changes, or delete a task you added. Press **E** again to close it.
+- Each bar has three click areas, left to right. Hover to see which one you are over:
+  - **Select** (left third): selects the nearest task monster, or the quest giver if you aren't working on the task.
+  - **Chat** (middle third): shows the task's details in your chat window (quest giver, location, kills needed, quest flags). Only you see these lines.
+  - **Edit** (right third): opens the task's edit menu under the bar: name, monsters, quest giver, kills required, cooldown, area and its two quest flags. You can also reset its progress, undo your changes, or delete a task you added. Click it again to close it.
 - **Quest flags** in the edit menu: the **counter flag** (counts your kills) and the **completion flag** (stamped when you turn the task in). They are filled in from your `/myquests` list when the tracker can tell which flags belong to the task, and each has a list of the kill-task flags in your quest list to pick from. A flag can belong to one task only.
 
 ### In the world
@@ -73,7 +73,7 @@ Open **Manage** at the bottom of the window (hidden while the window is pinned):
 
 - **Detected**: kill tasks found in your quest list or chat whose monster or quest giver isn't known yet, five per page. Open one for its full edit menu, fill it in and press **Save**, or press **Remove** to hide it. "Refresh list" in the quest-giver box lists the NPCs near you.
 - **Add**: add your own task, and your own areas.
-- **Quest log**: when your quest list was last read, any lines it didn't understand, and where your files are saved.
+- **Quest log**: when your quest list was last read, any lines it didn't understand, and where your files are saved. Its search box finds any kill task read from your quest list by name, monster, quest giver or quest flag; click a result to edit it.
 - **Options**:
   - NPC indication !
   - Automatic /myquests update

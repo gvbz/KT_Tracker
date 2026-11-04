@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.1.0
+
+- Task bars have no S and E buttons any more. Each bar has three click areas instead, left to right: **Select**, **Chat** and **Edit** (hover to see which). Rows are closer together.
+- Quest log: a search box for every kill task read from your quest list (name, monster, quest giver or quest flag). Click a result to open its edit menu.
+- The area list no longer has **Active**. A saved Active view opens the area of a task in progress.
+- Only one edit menu is open at a time.
+
 ## 5.0.0
 
 Needs AC:Unreal client v146 or newer.

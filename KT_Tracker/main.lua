@@ -1,21 +1,23 @@
--- KT_Tracker 5.0.0: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 5.1.0: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client v146 or newer (chat_subscriptions, sender_type, use events,
--- progress labels, clickable controls, hide_when_pinned).
+-- progress labels, clickable frames, overlays, hide_when_pinned).
 --
 -- Window (title and icon from plugin.json "presentation"): "Show in NAV", the
--- area selector (Active, a hunting area, one of your own areas, or Other),
--- then one row per task: a progress bar showing the monster/task name and
--- "kills / goal" (white in progress, green ready to turn in, yellow available,
--- red on cooldown with the time left), and two small buttons:
---   bar  click it: the task's details (giver, location, kills, quest flags) as
---        local notices in chat (only you see them, nothing is sent)
---   S    Select the nearest task monster, or the quest giver
---   E    Edit the task's fields in place (saved to the task database)
+-- area selector (a hunting area, one of your own areas, or Other), then one
+-- progress bar per task showing the monster/task name and "kills / goal"
+-- (white in progress, green ready to turn in, yellow available, red on
+-- cooldown with the time left). Three invisible click areas lie over each bar,
+-- left to right (tooltips say which):
+--   Select  the nearest task monster, or the quest giver
+--   Chat    the task's details (giver, location, kills, quest flags) as local
+--           notices in chat (only you see them, nothing is sent)
+--   Edit    the task's fields in place, under the bar (saved to the task database)
 -- Manage (hidden while the window is pinned) holds:
 --   Detected  kill tasks found in your quest list or chat whose monster or giver
 --             is unknown, 5 per page; each opens to the full edit form
 --   Add       a new task, and areas of your own
---   Quest log when the quest list was read, lines it didn't understand, files
+--   Quest log when the quest list was read, lines it didn't understand, files,
+--             and a search of the kill tasks read (each result opens its edit menu)
 --   Options
 -- The edit form has two quest-flag fields: the counter flag (kill count) and
 -- the completion flag (stamped on turn-in). Both are filled in from your
@@ -312,7 +314,7 @@ local TASKS = {
 -- database for this server), then Other.
 local BASE_AREAS = {"Hoshino", "Tou-Tou", "Rynthid", "Graveyard", "Viridian Rise", "Frozen Valley", "Neftet"}
 local AREAS = {"Hoshino", "Tou-Tou", "Rynthid", "Graveyard", "Viridian Rise", "Frozen Valley", "Neftet", "Other"}
-local VIEWS = {"Active", "Hoshino", "Tou-Tou", "Rynthid", "Graveyard", "Viridian Rise", "Frozen Valley", "Neftet", "Other"}
+local VIEWS = {"Hoshino", "Tou-Tou", "Rynthid", "Graveyard", "Viridian Rise", "Frozen Valley", "Neftet", "Other"}
 local AREA_SET = {Other = true}
 for _, a in ipairs(BASE_AREAS) do AREA_SET[a] = true end
 local COLORS = {"yellow", "green", "red", "blue", "white", "purple"}
@@ -321,7 +323,7 @@ local MYQ_HIDE = 60     -- seconds our quest-list reply is hidden from chat
 local NAV_MOVE_M, NAV_MIN_S = 10, 3  -- re-aim NAV when the target moved this far, at most this often
 local KILL_WORDS = {"killtask", "killcount", "slayerquest", "kills", "cull"}
 local DEFAULT_OPT = {
-  view = "Active", show_nav = true, npc_marks = true, auto_myq = true, myq_s = 65, myq_hide = true,
+  view = "", show_nav = true, npc_marks = true, auto_myq = true, myq_s = 65, myq_hide = true,
   range = 150, cooldown_hours = 20,
   col_available = "yellow", col_progress = "white", col_turnin = "green", col_cooldown = "red",
 }
@@ -588,7 +590,7 @@ local function refresh_areas()
     if type(a) == "string" and not AREA_SET[a] and #AREAS < 40 then AREAS[#AREAS + 1] = a; AREA_SET[a] = true end
   end
   AREAS[#AREAS + 1] = "Other"; AREA_SET.Other = true
-  VIEWS = {"Active"}
+  VIEWS = {}
   for _, a in ipairs(AREAS) do VIEWS[#VIEWS + 1] = a end
 end
 
@@ -1918,7 +1920,7 @@ local function remove_area(name)
   db.areas = keep
   for _, d in pairs(db.tasks) do if d.area == name then d.area = nil end end  -- back to its own area (or Other)
   refresh_areas(); mark_db(); rebuild_indexes()
-  if st.opt.view == name then st.opt.view = "Active"; dirty = true end
+  if st.opt.view == name then st.opt.view = nil; dirty = true end
   note("Removed area " .. name .. " (its tasks went back to their own area or Other)")
 end
 
@@ -1930,6 +1932,7 @@ end
 function guard.form_of(pfx)
   if pfx == "ie" then return edit_id and edraft or nil end
   if pfx == "ed" then return draft end
+  if pfx == "qe" then return guard.qsel and guard.qdraft or nil, guard.qsel end
   local n = string.sub(pfx, 1, 1) == "d" and tonumber(string.sub(pfx, 2))
   local tid = n and guard.DSLOT[n]
   if not tid then return nil end
@@ -1942,13 +1945,14 @@ local function handle_events(s, now)
     local cut = string.contains(id, "_") and regexmatch(id, "^([a-z0-9]+)_([a-z]+)$")
     local pfx, field = cut and cut["1"], cut and cut["2"]
     if e.type == "click" then
-      if string.sub(id, 1, 4) == "bar|" and guard.BAR[id] then show_in_chat(guard.BAR[id])
+      if string.sub(id, 1, 5) == "chat|" and guard.BAR[id] then show_in_chat(guard.BAR[id])
       elseif SEL_IDS[id] then
         local target = SEL_TARGET[SEL_IDS[id]]
         if target then pending_select = target else note("None in range") end
       elseif EDIT_IDS[id] then
         -- E opens this task's edit menu under its bar; E again closes it.
-        if edit_id == EDIT_IDS[id] then edit_id = nil else edit_id = EDIT_IDS[id]; edraft = form_from(edit_id) end
+        -- One edit menu at a time (a window holds at most 256 controls).
+        if edit_id == EDIT_IDS[id] then edit_id = nil else edit_id = EDIT_IDS[id]; edraft = form_from(edit_id); guard.qsel = nil end
       elseif id == "ie_save" and edit_id then
         edraft.id = edit_id
         if save_form(edraft) then edit_id = nil end
@@ -1958,6 +1962,18 @@ local function handle_events(s, now)
       elseif id == "ed_save" then
         draft.id = nil
         if save_form(draft) then draft = {area = draft.area or "Other"} end
+      elseif string.sub(id, 1, 3) == "qr|" and guard.QRES[id] then
+        -- Quest log search: a result opens its edit menu under the list; again closes it.
+        local tid = guard.QRES[id]
+        if guard.qsel == tid then guard.qsel = nil else guard.qsel = tid; guard.qdraft = form_from(tid); edit_id = nil end
+      elseif id == "qe_save" and guard.qsel then
+        guard.qdraft.id = guard.qsel
+        if save_form(guard.qdraft) then guard.qsel = nil end
+      elseif id == "qe_cancel" then guard.qsel = nil
+      elseif id == "qe_reset" and guard.qsel then reset_task(guard.qsel); guard.qsel = nil
+      elseif id == "qe_del" and guard.qsel then delete_task(guard.qsel); guard.qsel = nil
+      elseif id == "qp_prev" then guard.qpage = math.max(1, (guard.qpage or 1) - 1)
+      elseif id == "qp_next" then guard.qpage = (guard.qpage or 1) + 1
       elseif id == "dp_prev" then guard.dpage = math.max(1, (guard.dpage or 1) - 1)
       elseif id == "dp_next" then guard.dpage = (guard.dpage or 1) + 1
       elseif pfx and (field == "save" or field == "rm") and string.sub(pfx, 1, 1) == "d" then
@@ -1982,6 +1998,7 @@ local function handle_events(s, now)
       local v = e.value
       local f = pfx and guard.form_of(pfx)
       if id == "view" then st.opt.view = v; dirty = true
+      elseif id == "qs_text" then guard.qs = string.sub(tostring(v or ""), 1, 60); guard.qpage = 1
       elseif f and field == "pick" then
         if v == PICK_REFRESH then
           -- Giver pickers are filled only on request: the NPCs within 30 m now, sorted.
@@ -2169,6 +2186,17 @@ local function build(s)
     local t = task(id)
     info[id] = {status = stt, p = p, left = left, name = display(t), area = area_of(t)}
   end
+  -- 5.1.0: no "Active" list. With no saved area (or the old Active), show the
+  -- area of a task in progress, else the first area.
+  if not AREA_SET[view] then
+    view = nil
+    for _, id in ipairs(all_ids()) do
+      local i = info[id]
+      if i.status == "turnin" or i.status == "active" then view = i.area; break end
+    end
+    view = view or AREAS[1]
+    st.opt.view = view; dirty = true
+  end
 
   -- Top: Show in NAV, then the area selector
   ui[#ui + 1] = {id = "opt|show_nav", type = "checkbox", size = TXT.body, text = "Show in NAV", value = opt("show_nav") ~= false,
@@ -2185,10 +2213,7 @@ local function build(s)
   local rows = {}
   for _, id in ipairs(all_ids()) do
     local i = info[id]
-    local show
-    if view == "Active" then show = i.status == "active" or i.status == "turnin"
-    else show = i.area == view end
-    if show then rows[#rows + 1] = id end
+    if i.area == view then rows[#rows + 1] = id end
   end
   -- Sort with precomputed text keys (the built-in comparison costs no Lua work).
   local ORDER = {turnin = 1, active = 2, available = 3, cooldown = 4}
@@ -2203,13 +2228,13 @@ local function build(s)
   local shown = 0
   for _, id in ipairs(rows) do
     if shown >= MAX_ROWS then
-      ui[#ui + 1] = {id = "more", type = "text", size = TXT.body, text = "+" .. (#rows - shown) .. " more (pick an area)"}
+      ui[#ui + 1] = {id = "more", type = "text", size = TXT.body, text = "+" .. (#rows - shown) .. " more"}
       break
     end
     shown = shown + 1
     local t, i = task(id), info[id]
-    -- 5.0.0: one bar per task (name and progress), clickable for the details in
-    -- chat, with S (Select) and E (Edit) beside it.
+    -- 5.1.0: one bar per task (name and progress) with three invisible click
+    -- areas over it, left to right: Select, Chat (details in chat), Edit.
     local label, frac = display(t), 0
     local g = i.p and i.p.g and i.p.g > 0 and i.p.g or nil
     if i.status == "active" then
@@ -2219,14 +2244,13 @@ local function build(s)
       if g then label = label .. "  " .. i.p.n .. " / " .. g end
       frac = 1
     elseif i.status == "cooldown" then label = label .. "  " .. dur(i.left) end
-    local bid, sb, eb = uid("bar|", id), uid("sel|", id), uid("edit|", id)
-    guard.BAR[bid], SEL_IDS[sb], EDIT_IDS[eb] = id, id, id
-    ui[#ui + 1] = {id = uid("r|", id), type = "row", children = {
-      {id = bid, type = "progress", size = TXT.body, value = frac, text = label, color = guard.BAR_FILL[i.status], text_color = guard.BAR_TEXT[i.status],
-        clickable = true, tooltip = label .. " - click for details in chat"},
-      {id = sb, type = "button", size = TXT.body, text = "S", auto_width = true,
-        tooltip = (i.status == "active") and "Select the nearest monster" or "Select the quest giver"},
-      {id = eb, type = "button", size = TXT.body, text = "E", auto_width = true, tooltip = "Edit this task"}}}
+    local sb, cb, eb = uid("sel|", id), uid("chat|", id), uid("edit|", id)
+    guard.BAR[cb], SEL_IDS[sb], EDIT_IDS[eb] = id, id, id
+    local function zone(zid, tip) return {id = zid, type = "frame", color = "#00000000", clickable = true, height = 16, padding = 0, tooltip = tip} end
+    ui[#ui + 1] = {id = uid("r|", id), type = "overlay", padding = 0, children = {
+      {id = uid("bar|", id), type = "progress", size = TXT.body, padding = 0, value = frac, text = label,
+        color = guard.BAR_FILL[i.status], text_color = guard.BAR_TEXT[i.status]},
+      {id = uid("z|", id), type = "row", padding = 0, children = {zone(sb, "Select"), zone(cb, "Chat"), zone(eb, "Edit")}}}}
     if edit_id == id then
       -- Edit in place, under the bar: the fields of this task, saved to the task database.
       local is_custom = db.tasks[id] and db.tasks[id].custom
@@ -2240,7 +2264,7 @@ local function build(s)
     end
   end
   if shown == 0 then
-    ui[#ui + 1] = {id = "empty", type = "text", size = TXT.body, text = (view == "Active") and "No kill tasks in progress." or "No tasks here yet."}
+    ui[#ui + 1] = {id = "empty", type = "text", size = TXT.body, text = "No tasks here yet."}
   end
   if #last_note > 0 then ui[#ui + 1] = {id = "note", type = "text", text = last_note, size = TXT.small} end
   if s.error and s.error ~= "" then ui[#ui + 1] = {id = "err", type = "text", size = TXT.body, color = "red", text = string.sub(s.error, 1, 200)} end
@@ -2305,7 +2329,14 @@ local function build(s)
   if #detected == 0 then detected[1] = {id = "fnone", type = "text", size = TXT.body, text = "Nothing to fill in.",
     tooltip = "Kill tasks found in your quest list or in chat appear here when their monster or quest giver is unknown."} end
 
-  local nkill = kill_tasks_read()
+  -- Kill tasks on your quest list (counter or completion flag listed), for the
+  -- count and the search below.
+  local readids = {}
+  for _, id in ipairs(all_ids()) do
+    local t = task(id)
+    if (t.key and st.q[t.key]) or (t.done and st.q[t.done]) then readids[#readids + 1] = id end
+  end
+  local nkill = #readids
   local qline
   if mq.active then
     qline = "Reading /myquests..."
@@ -2329,6 +2360,52 @@ local function build(s)
     {id = "lg3", type = "text", size = TXT.small, text = "Task database: Profiles/kt_tracker/Library/Database/" .. db_file_name() .. ".json" .. (dbf.err and (" - save failed: " .. dbf.err) or "")}}
 
   if log[2].text == "" then table.remove(log, 2) end
+
+  -- 5.1.0: search the kill tasks read from your quest list (name, monster,
+  -- quest giver or quest flag); a result opens its edit menu under the list.
+  guard.QRES = {}
+  local want = string.lower(trim(guard.qs or ""))
+  local qkeys, qmap = {}, {}
+  for _, id in ipairs(readids) do
+    local hit = #want == 0
+    if not hit then
+      local t = task(id)
+      hit = contains(string.lower(info[id].name .. " " .. join_mobs(t.mobs) .. " " .. (t.npc or "") .. " " .. (t.key or "") .. " " .. (t.done or "")), want)
+    end
+    if hit then local k = string.lower(info[id].name) .. "|" .. id; qkeys[#qkeys + 1] = k; qmap[k] = id end
+  end
+  table.sort(qkeys)
+  local qper = 6
+  local qpages = math.max(1, math.ceil(#qkeys / qper))
+  guard.qpage = math.max(1, math.min(guard.qpage or 1, qpages))
+  log[#log + 1] = {id = "qs_text", type = "input", size = TXT.body, text = "Search kill tasks read (" .. #qkeys .. ")", value = guard.qs or "",
+    tooltip = "Name, monster, quest giver or quest flag"}
+  for n = 1, qper do
+    local k = qkeys[(guard.qpage - 1) * qper + n]
+    if not k then break end
+    local tid = qmap[k]
+    local rid = uid("qr|", tid)
+    guard.QRES[rid] = tid
+    log[#log + 1] = {id = rid, type = "text", size = TXT.body, text = info[tid].name .. " - " .. WORD[info[tid].status],
+      bold = guard.qsel == tid, clickable = true, tooltip = "Edit"}
+  end
+  if qpages > 1 then
+    log[#log + 1] = {id = "qp", type = "row", children = {
+      {id = "qp_prev", type = "button", size = TXT.body, text = "<", auto_width = true, enabled = guard.qpage > 1},
+      {id = "qp_n", type = "text", size = TXT.body, text = guard.qpage .. " / " .. qpages},
+      {id = "qp_next", type = "button", size = TXT.body, text = ">", auto_width = true, enabled = guard.qpage < qpages}}}
+  end
+  if guard.qsel and info[guard.qsel] then
+    local qd = db.tasks[guard.qsel]
+    local qb = {{id = "qe_save", type = "button", size = TXT.body, text = "Save"}, {id = "qe_cancel", type = "button", size = TXT.body, text = "Cancel"},
+      {id = "qe_reset", type = "button", size = TXT.body, text = "Reset progress", tooltip = "Clear this task's kill count and timer for this character"}}
+    if qd and qd.custom then qb[#qb + 1] = {id = "qe_del", type = "button", size = TXT.body, text = "Delete"}
+    elseif qd then qb[#qb + 1] = {id = "qe_del", type = "button", size = TXT.body, text = "Undo my changes"} end
+    local body = {{id = "qe_head", type = "text", size = TXT.body, text = "Edit " .. info[guard.qsel].name, bold = true}}
+    for _, c in ipairs(guard.editor("qe", guard.qdraft, picker, flags)) do body[#body + 1] = c end
+    body[#body + 1] = {id = "qe_btns", type = "row", children = qb}
+    log[#log + 1] = {id = "qe_box", type = "column", children = body}
+  elseif guard.qsel then guard.qsel = nil end
   local colsel = function(key, text) return {id = "opt|" .. key, type = "select", size = TXT.body, text = text, value = opt(key), options = COLORS} end
   local options = {
     {id = "opt|npc_marks", type = "checkbox", size = TXT.body, text = "NPC indication !", value = opt("npc_marks"), tooltip = "! over quest givers, colored by task state"},
@@ -2353,7 +2430,7 @@ local function build(s)
   -- the window very long); hovering shows the full text.
   local function one_line(list)
     for _, c in ipairs(list) do
-      if c.type == "row" or c.type == "column" or c.type == "tabs" then
+      if c.type == "row" or c.type == "column" or c.type == "tabs" or c.type == "overlay" or c.type == "frame" then
         if c.children then one_line(c.children) end
       else
         c.wrap = false
@@ -2422,7 +2499,7 @@ return function(s, p)
     for k, v in pairs(saved.q or {}) do
       if type(v) == "table" then st.q[k] = {s = tonumber(v.s) or 0, t = tonumber(v.t) or 0, m = tonumber(v.m), d = tonumber(v.d), desc = v.desc} end
     end
-    if st.opt.view == "Custom" then st.opt.view = "Other" elseif st.opt.view == "All" then st.opt.view = "Active" end
+    if st.opt.view == "Custom" then st.opt.view = "Other" elseif st.opt.view == "All" or st.opt.view == "Active" then st.opt.view = nil end
     st.opt.mini_area, st.opt.info_mode, st.opt.reread_reward = nil, nil, nil
     -- 4.7: interval choices are "Off" or 2-minute steps; older values fall back to the default (4 min).
     -- 4.14: the interval is in seconds (default 65) with its own on/off switch;
