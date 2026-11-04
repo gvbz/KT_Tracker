@@ -1,4 +1,4 @@
--- KT_Tracker 5.1.0: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 5.2.0: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client v146 or newer (chat_subscriptions, sender_type, use events,
 -- progress labels, clickable frames, overlays, hide_when_pinned).
 --
@@ -21,8 +21,11 @@
 --   Options
 -- The edit form has two quest-flag fields: the counter flag (kill count) and
 -- the completion flag (stamped on turn-in). Both are filled in from your
--- /myquests list when the tracker can tell which flags belong to the task, and
--- both lists offer the flags from that list.
+-- /myquests list when the tracker can tell which flags belong to the task.
+-- 5.2.0: typing in either box lists up to 5 matching flags under it (your
+-- quest list first, then the catalog and task database); click one to use it.
+-- A flag that only an unused catalog task has can be moved to your task.
+-- More than 14 tasks in an area: pages with < and > under the bars.
 --
 -- Chat (5.0.0): plugin.json "chat_subscriptions" deliver only the lines the
 -- tracker uses: server lines (quest list, kill counts, stamps, experience,
@@ -132,7 +135,6 @@ local CATALOG = {
   {q="Iron Blade Trooper Kill Task", f={"ironbladetrooperkillcount","ironbladetrooperkilltask"}, n={"Lieutenant Micham"}, m={"Iron Blade Trooper"}, c="33.4S 6.3E", r=true},
   {q="Iron Spined Chittick Kill Task", f={"ironspinedchittickkills","ironspinedchitticktask"}, n={"Aidene"}, m={"Iron Spined Chittick"}, g=50, c="2.0N 95.6E", t="Oolatanga's Refuge", r=true},
   {q="Investigating the Societies", f={"killtask-blightspirit","killtask-blightspiritwait"}, n={"Jondor Torgren","Candrus Steady-Hand","Joku Shunja"}, c="13.6N 0.7E", t="Zaikhal", r=true},
-  {q="quest timer", f={"killtaskchaosdragwait"}, s="Conquest", r=true},
   {q="Harvest Reaper Kill Task", f={"killtask-harvestreaper","killtask-harvestreapercompletions"}, n={"Majestic Pumpkin"}, m={"Harvest Reaper","Harvest Reapers"}, g=10, c="30.7N 27.8E", t="Glenden Wood", r=true},
   {q="Pumpkin Lord Kill Task", f={"killtask-pumpkinlord"}, n={"Majestic Pumpkin"}, m={"Pumpkin Lord","Pumpkin Lords"}, g=3, c="30.7N 27.8E", t="Glenden Wood", r=true},
   {q="Altered Drudge Kill Task", f={"killtaskaltereddrudges_0507","killtaskaltereddrudgeswait_0507"}, n={"Jarvis Hammerstone"}, m={"Altered Drudge","Altered Drudges"}, g=40, c="25.6N 49.4E", t="Cragstone", r=true},
@@ -141,7 +143,7 @@ local CATALOG = {
   {q="Banished Creature Kill Task", f={"killtaskbanishedcreature_0609","killtaskbanishedcreaturewait_0609"}, n={"Belinda du Loc"}, m={"Banished Creature"}, c="68.9N 21.6W", t="Stonehold", r=true},
   {q="Blood Disciple Kill Task", f={"killtaskblooddisciple"}, m={"Blood Disciple"}, s="Conquest", r=false},
   {q="Blood Shreth Kill Task", f={"killtaskbloodshreth","killtaskbloodshrethwait"}, n={"San Ming"}, m={"Blood Shreth","Blood Shreths"}, g=10, c="33.5S 72.8E", r=true},
-  {q="Chaos Drudge Kill Task", f={"killtaskchaosdrag"}, m={"Chaos Drudge"}, s="Conquest", r=false},
+  {q="Chaos Dragon Kill Task", f={"killtaskchaosdrag","killtaskchaosdragwait"}, n={"Luitbald"}, m={"Elder Chaos Dragon"}, g=25, s="Conquest", r=true},
   {q="Corrupted Gravestone Kill Task", f={"killtaskcorruptedgravestones_1311","killtaskcorruptedgravestoneswait_1311"}, n={"Slubbley"}, m={"Corrupted Gravestone","Corrupted Gravestones"}, g=6, c="65.3S 43.3W", t="Arcanum Lookout", r=true},
   {q="Crystalline Killer", f={"killtaskcrystallinewisps10109","killtaskcrystallinewisps10109wait"}, n={"Oorjit"}, m={"Crystalline Wisps"}, g=100, c="14.6S 62.0W", t="Crystalline Crag", r=true},
   {q="Armoredillo Hunting: Lost City of Neftet", f={"killtaskdesertareaarmoredillo_0511","killtaskdesertareaarmoredillowait_0511"}, n={"Dame Tularin"}, m={"Armoredillos"}, g=30, r=true},
@@ -600,7 +602,7 @@ local function task(id)
   if not d then return b end
   return {name = d.name or b.name, mname = (not d.name) and b.mname or nil, area = d.area or b.area,
     mobs = (d.mobs and #d.mobs > 0) and d.mobs or b.mobs, goal = d.goal or b.goal, npc = d.npc or b.npc, npcs = b.npcs,
-    wcid = d.wcid or b.wcid, key = d.key or b.key, done = d.done or b.done, cd_h = d.cd_h, loc = b.loc, quest = b.quest,
+    wcid = d.wcid or b.wcid, key = d.key or (not d.nokey and b.key) or nil, done = d.done or (not d.nodone and b.done) or nil, cd_h = d.cd_h, loc = b.loc, quest = b.quest,
     server = b.server, catalog = b.catalog, lxy = b.lxy, kt = b.kt, own_npc = d.npc ~= nil, edited = true}
 end
 local function display(t) return t.mname or t.name or "?" end
@@ -781,6 +783,7 @@ local function move_progress(from, to)
   st.prog[from], st.cd[from], st.done_at[from] = nil, nil, nil
   dirty = true
 end
+guard.MOVED = {killtaskchaosdragwait = "killtaskchaosdrag"}
 local function merge_duplicates()
   local merged = false
   db.merged = db.merged or {}
@@ -793,6 +796,20 @@ local function merge_duplicates()
         move_progress(id, target)
         note(d.name .. " now counts toward " .. display(task(target)))
       end
+    end
+  end
+  -- 5.2.0: catalog corrections. Details you saved under an old catalog id move
+  -- to the corrected task (the Chaos Dragon task was saved under its timer).
+  for from, to in pairs(guard.MOVED) do
+    local d = db.tasks[from]
+    if d and not BASE[from] and not CAT[from] and CAT[to] then
+      local nd = db_task(to)
+      for _, k in ipairs({"name", "mobs", "npc", "wcid", "goal", "area", "cd_h"}) do if nd[k] == nil then nd[k] = d[k] end end
+      db.tasks[from] = nil; db.merged[from] = to; mark_db(); merged = true
+      if st.cd[from] and not st.cd[to] then st.cd[to] = st.cd[from] end
+      if st.done_at[from] and not st.done_at[to] then st.done_at[to] = st.done_at[from] end
+      move_progress(from, to)
+      note("Moved " .. (d.name or from) .. " to " .. CAT[to].name)
     end
   end
   for from, to in pairs(db.merged) do if st.prog[from] then move_progress(from, to) end end
@@ -1853,12 +1870,25 @@ local function save_form(f)
   if not key or not done then note("Quest flags are one word, up to 80 characters"); return nil end
   local id = f.id
   local new_id = (not id) and ("c_" .. slug(name)) or nil
-  -- A flag can belong to one task only.
+  -- A flag can belong to one task only. One that only an unused catalog task
+  -- (no details of yours, no progress) has is moved to this task.
+  local take = {}
   for _, k in ipairs({key, done}) do
     local owner = k ~= "" and (guard.FLAG[k] or DONE_OWNER[k])
-    if owner and owner ~= (id or new_id) then note(k .. " already belongs to " .. display(task(owner))); return nil end
+    if owner and owner ~= (id or new_id) then
+      local od = db.tasks[owner]
+      if CAT[owner] and not BASE[owner] and not st.prog[owner] and not (od and (od.name or od.mobs or od.npc or od.goal or od.area or od.key or od.done)) then
+        take[#take + 1] = {owner, k}
+      else note(k .. " already belongs to " .. display(task(owner))); return nil end
+    end
   end
   if key ~= "" and key == done then note("The counter and completion flags must differ"); return nil end
+  for _, tk in ipairs(take) do
+    local ot = task(tk[1])
+    local od = db_task(tk[1])
+    if ot.key == tk[2] then od.nokey = true end
+    if ot.done == tk[2] then od.nodone = true end
+  end
   if not id then
     if #name == 0 or #mobs == 0 then note("Enter a name and at least one monster"); return nil end
     id = new_id
@@ -1888,8 +1918,8 @@ local function save_form(f)
     local q = k and QALL[k]
     if q and not st.q[k] then st.q[k] = {s = q.s, t = q.t, m = q.m, d = q.d, desc = q.desc, r = q.r} end
   end
-  ids_cache = nil; dirty = true
-  note("Saved " .. display(task(id)))
+  ids_cache = nil; dirty = true; guard.fs = nil
+  note("Saved " .. display(task(id)) .. ((#take > 0) and (" (" .. take[1][2] .. " moved from " .. display(task(take[1][1])) .. ")") or ""))
   return id
 end
 local function reset_task(tid)
@@ -1962,6 +1992,15 @@ local function handle_events(s, now)
       elseif id == "ed_save" then
         draft.id = nil
         if save_form(draft) then draft = {area = draft.area or "Other"} end
+      elseif guard.FM and guard.FM[id] then
+        local m, f = guard.FM[id], pfx and guard.form_of(pfx)
+        if f then
+          guard.fs_ignore = {pfx = pfx, field = m.field, text = f[m.field]}
+          f[m.field] = m.flag
+        end
+        guard.fs = nil
+      elseif id == "bp_prev" then guard.bpage = math.max(1, (guard.bpage or 1) - 1)
+      elseif id == "bp_next" then guard.bpage = (guard.bpage or 1) + 1
       elseif string.sub(id, 1, 3) == "qr|" and guard.QRES[id] then
         -- Quest log search: a result opens its edit menu under the list; again closes it.
         local tid = guard.QRES[id]
@@ -1997,7 +2036,7 @@ local function handle_events(s, now)
     elseif e.type == "change" then
       local v = e.value
       local f = pfx and guard.form_of(pfx)
-      if id == "view" then st.opt.view = v; dirty = true
+      if id == "view" then st.opt.view = v; dirty = true; guard.bpage = 1
       elseif id == "qs_text" then guard.qs = string.sub(tostring(v or ""), 1, 60); guard.qpage = 1
       elseif f and field == "pick" then
         if v == PICK_REFRESH then
@@ -2013,8 +2052,16 @@ local function handle_events(s, now)
           picker_names = names
           if #names == 0 then note("No NPCs within 30 m") end
         elseif v and v ~= PICK_HINT then f.npc = tostring(v) end
-      elseif f and (field == "kpick" or field == "dpick") then
-        if v and v ~= guard.FLAG_HINT then f[field == "kpick" and "key" or "done"] = tostring(v) end
+      elseif f and (field == "key" or field == "done") then
+        local txt = tostring(v or "")
+        local ig = guard.fs_ignore
+        -- After a match is picked, the box can still send what was typed when it
+        -- loses focus; that is ignored so the picked flag stays.
+        if ig and ig.pfx == pfx and ig.field == field and ig.text == txt then guard.fs_ignore = nil
+        else
+          f[field] = txt
+          guard.fs = {pfx = pfx, field = field, text = string.lower(trim(txt))}
+        end
       elseif f and field then f[field] = v
       elseif id == "na_name" then new_area = tostring(v or "")
       elseif string.sub(id, 1, 4) == "opt|" then st.opt[string.sub(id, 5)] = v; dirty = true
@@ -2162,12 +2209,57 @@ function guard.editor(pfx, f, picker, flags)
     {id = pfx .. "_goal", type = "input", size = B, text = "Kills required", value = f.goal or ""},
     {id = pfx .. "_cd", type = "input", size = B, text = "Cooldown hours (blank = default)", value = f.cd or ""},
     {id = pfx .. "_area", type = "select", size = B, text = "Area", value = AREA_SET[f.area or ""] and f.area or "Other", options = AREAS},
-    {id = pfx .. "_key", type = "input", size = B, text = "Counter quest flag", value = f.key or "",
-      tooltip = "The quest flag that counts your kills (from /myquests)"},
-    {id = pfx .. "_kpick", type = "select", size = B, text = "...or pick from your quest list", value = flags.k[1], options = flags.k},
-    {id = pfx .. "_done", type = "input", size = B, text = "Completion quest flag", value = f.done or "",
-      tooltip = "The quest flag stamped when you turn the task in (from /myquests)"},
-    {id = pfx .. "_dpick", type = "select", size = B, text = "...or pick from your quest list", value = flags.d[1], options = flags.d}}
+    {id = pfx .. "_key", type = "input", size = B, text = "Counter quest flag", value = f.key or "", live = true, placeholder = "Type to search",
+      tooltip = "The quest flag that counts your kills"},
+    {id = pfx .. "_done", type = "input", size = B, text = "Completion quest flag", value = f.done or "", live = true, placeholder = "Type to search",
+      tooltip = "The quest flag stamped when you turn the task in (its timer)"}}
+end
+-- 5.2.0: quest-flag search. Typing in a flag box lists up to 5 matching flags
+-- under it (your quest list first, then the catalog and task database), for
+-- that box only; clicking one fills it in.
+guard.LETTER = {"a", "b", "c", "d", "e"}
+function guard.flag_matches(text, field)
+  local fs = guard.fs
+  if fs.res and fs.res_text == text then return fs.res end
+  local seen, mine, other = {}, {}, {}
+  local function consider(k, listed)
+    if type(k) ~= "string" or seen[k] or not contains(k, text) then return end
+    seen[k] = true
+    if (flag_role(k) == "done") ~= (field == "done") then return end
+    if listed then mine[#mine + 1] = k else other[#other + 1] = k end
+  end
+  for k in pairs(QALL) do consider(k, true) end
+  for _, e in ipairs(CATALOG) do for _, k in ipairs(e.f) do consider(k, false) end end
+  for _, t in ipairs(TASKS) do consider(t.flag, false); consider(t.done_flag, false) end
+  for _, d in pairs(db.tasks) do consider(d.key, false); consider(d.done, false) end
+  table.sort(mine); table.sort(other)
+  local res = {}
+  for _, k in ipairs(mine) do if #res < 5 then res[#res + 1] = k end end
+  for _, k in ipairs(other) do if #res < 5 then res[#res + 1] = k end end
+  fs.res, fs.res_text = res, text
+  return res
+end
+-- The editor's fields plus, under the flag box being typed in, its matches.
+function guard.editor_with_search(pfx, f, picker, flags, mytid)
+  local list = guard.editor(pfx, f, picker, flags)
+  local fs = guard.fs
+  if not (fs and fs.pfx == pfx and #fs.text >= 3) then return list end
+  local out = {}
+  for _, c in ipairs(list) do
+    out[#out + 1] = c
+    if c.id == pfx .. "_" .. fs.field then
+      local res = guard.flag_matches(fs.text, fs.field)
+      for n, k in ipairs(res) do
+        local mid = pfx .. "_" .. string.sub(fs.field, 1, 1) .. guard.LETTER[n]
+        guard.FM[mid] = {field = fs.field, flag = k}
+        local owner = guard.FLAG[k] or DONE_OWNER[k]
+        out[#out + 1] = {id = mid, type = "text", size = TXT.body, text = "   " .. k .. ((owner and owner ~= mytid) and (" - " .. display(task(owner))) or ""),
+          clickable = true, tooltip = "Use this flag"}
+      end
+      if #res == 0 then out[#out + 1] = {id = pfx .. "_" .. string.sub(fs.field, 1, 1) .. "none", type = "text", size = TXT.small, text = "   No matching quest flags"} end
+    end
+  end
+  return out
 end
 -- Each task's bar: fill and label color by state (soft fills keep the label readable).
 guard.BAR_FILL = {active = "#D9D9D955", turnin = "#2E7D3299", available = "#00000000", cooldown = "#00000000"}
@@ -2175,7 +2267,7 @@ guard.BAR_TEXT = {active = "white", turnin = "green", available = "yellow", cool
 
 local function build(s)
   local ui = {}
-  EDIT_IDS, AREA_IDS, SEL_IDS, guard.BAR = {}, {}, {}, {}
+  EDIT_IDS, AREA_IDS, SEL_IDS, guard.BAR, guard.FM = {}, {}, {}, {}, {}
   local flags = guard.flag_lists()
   local view = opt("view")
 
@@ -2195,7 +2287,8 @@ local function build(s)
       if i.status == "turnin" or i.status == "active" then view = i.area; break end
     end
     view = view or AREAS[1]
-    st.opt.view = view; dirty = true
+    -- Saved only once the task database (with your own areas) has loaded.
+    if dbf.phase == "ready" then st.opt.view = view; dirty = true end
   end
 
   -- Top: Show in NAV, then the area selector
@@ -2225,12 +2318,13 @@ local function build(s)
   table.sort(keyed)
   rows = {}
   for i, k in ipairs(keyed) do rows[i] = by_key[k] end
+  -- 5.2.0: 14 bars per page, with < and > under them.
+  local bpages = math.max(1, math.ceil(#rows / MAX_ROWS))
+  guard.bpage = math.max(1, math.min(guard.bpage or 1, bpages))
+  local first = (guard.bpage - 1) * MAX_ROWS
   local shown = 0
-  for _, id in ipairs(rows) do
-    if shown >= MAX_ROWS then
-      ui[#ui + 1] = {id = "more", type = "text", size = TXT.body, text = "+" .. (#rows - shown) .. " more"}
-      break
-    end
+  for n = first + 1, math.min(#rows, first + MAX_ROWS) do
+    local id = rows[n]
     shown = shown + 1
     local t, i = task(id), info[id]
     -- 5.1.0: one bar per task (name and progress) with three invisible click
@@ -2255,13 +2349,19 @@ local function build(s)
       -- Edit in place, under the bar: the fields of this task, saved to the task database.
       local is_custom = db.tasks[id] and db.tasks[id].custom
       local ebtn = {{id = "ie_save", type = "button", size = TXT.body, text = "Save"}, {id = "ie_cancel", type = "button", size = TXT.body, text = "Cancel"},
-        {id = "ie_reset", type = "button", size = TXT.body, text = "Reset progress", tooltip = "Clear this task's kill count and timer for this character"}}
+        {id = "ie_reset", type = "button", size = TXT.body, text = "Reset", tooltip = "Clear this task's kill count and timer for this character"}}
       if is_custom then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", size = TXT.body, text = "Delete"}
-      elseif db.tasks[id] then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", size = TXT.body, text = "Undo my changes"} end
-      local body = guard.editor("ie", edraft, picker, flags)
+      elseif db.tasks[id] then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", size = TXT.body, text = "Undo", tooltip = "Back to the original task details"} end
+      local body = guard.editor_with_search("ie", edraft, picker, flags, id)
       body[#body + 1] = {id = "ie_btns", type = "row", children = ebtn}
       ui[#ui + 1] = {id = "ie_box", type = "column", children = body}
     end
+  end
+  if bpages > 1 then
+    ui[#ui + 1] = {id = "bp", type = "row", children = {
+      {id = "bp_prev", type = "button", size = TXT.body, text = "<", auto_width = true, enabled = guard.bpage > 1},
+      {id = "bp_n", type = "text", size = TXT.body, text = guard.bpage .. " / " .. bpages .. "  (" .. #rows .. " tasks)"},
+      {id = "bp_next", type = "button", size = TXT.body, text = ">", auto_width = true, enabled = guard.bpage < bpages}}}
   end
   if shown == 0 then
     ui[#ui + 1] = {id = "empty", type = "text", size = TXT.body, text = "No tasks here yet."}
@@ -2271,7 +2371,7 @@ local function build(s)
 
   -- Manage > Add: a new task, and areas of your own.
   local editor = {{id = "ed_head", type = "text", size = TXT.body, text = "New task", bold = true}}
-  for _, c in ipairs(guard.editor("ed", draft, picker, flags)) do editor[#editor + 1] = c end
+  for _, c in ipairs(guard.editor_with_search("ed", draft, picker, flags)) do editor[#editor + 1] = c end
   editor[#editor + 1] = {id = "ed_save", type = "button", size = TXT.body, text = "Add task"}
   editor[#editor + 1] = {id = "na_head", type = "text", size = TXT.body, text = "Areas", bold = true}
   editor[#editor + 1] = {id = "na_row", type = "row", children = {
@@ -2309,7 +2409,7 @@ local function build(s)
     local t = task(tid)
     fill[tid] = fill[tid] or form_from(tid)
     local pfx = "d" .. n
-    local body = guard.editor(pfx, fill[tid], picker, flags)
+    local body = guard.editor_with_search(pfx, fill[tid], picker, flags, tid)
     local q = t.key and (st.q[t.key] or QALL[t.key])
     if q and q.desc and q.desc ~= info[tid].name then
       table.insert(body, 1, {id = pfx .. "_desc", type = "text", size = TXT.small, text = t.key .. ": " .. q.desc})
@@ -2398,11 +2498,11 @@ local function build(s)
   if guard.qsel and info[guard.qsel] then
     local qd = db.tasks[guard.qsel]
     local qb = {{id = "qe_save", type = "button", size = TXT.body, text = "Save"}, {id = "qe_cancel", type = "button", size = TXT.body, text = "Cancel"},
-      {id = "qe_reset", type = "button", size = TXT.body, text = "Reset progress", tooltip = "Clear this task's kill count and timer for this character"}}
+      {id = "qe_reset", type = "button", size = TXT.body, text = "Reset", tooltip = "Clear this task's kill count and timer for this character"}}
     if qd and qd.custom then qb[#qb + 1] = {id = "qe_del", type = "button", size = TXT.body, text = "Delete"}
-    elseif qd then qb[#qb + 1] = {id = "qe_del", type = "button", size = TXT.body, text = "Undo my changes"} end
+    elseif qd then qb[#qb + 1] = {id = "qe_del", type = "button", size = TXT.body, text = "Undo", tooltip = "Back to the original task details"} end
     local body = {{id = "qe_head", type = "text", size = TXT.body, text = "Edit " .. info[guard.qsel].name, bold = true}}
-    for _, c in ipairs(guard.editor("qe", guard.qdraft, picker, flags)) do body[#body + 1] = c end
+    for _, c in ipairs(guard.editor_with_search("qe", guard.qdraft, picker, flags, guard.qsel)) do body[#body + 1] = c end
     body[#body + 1] = {id = "qe_btns", type = "row", children = qb}
     log[#log + 1] = {id = "qe_box", type = "column", children = body}
   elseif guard.qsel then guard.qsel = nil end

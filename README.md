@@ -47,11 +47,13 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
   - green: ready to turn in (full bar)
   - yellow: available to pick up
   - red: on cooldown, with the time left
+- More than 14 tasks in an area: use **<** and **>** under the bars to see the rest.
 - Each bar has three click areas, left to right. Hover to see which one you are over:
   - **Select** (left third): selects the nearest task monster, or the quest giver if you aren't working on the task.
   - **Chat** (middle third): shows the task's details in your chat window (quest giver, location, kills needed, quest flags). Only you see these lines.
-  - **Edit** (right third): opens the task's edit menu under the bar: name, monsters, quest giver, kills required, cooldown, area and its two quest flags. You can also reset its progress, undo your changes, or delete a task you added. Click it again to close it.
-- **Quest flags** in the edit menu: the **counter flag** (counts your kills) and the **completion flag** (stamped when you turn the task in). They are filled in from your `/myquests` list when the tracker can tell which flags belong to the task, and each has a list of the kill-task flags in your quest list to pick from. A flag can belong to one task only.
+  - **Edit** (right third): opens the task's edit menu under the bar: name, monsters, quest giver, kills required, cooldown, area and its two quest flags. **Reset** clears its progress, **Undo** goes back to the original details, and **Delete** removes a task you added. Click it again to close it.
+- **Quest flags** in the edit menu: the **counter flag** (counts your kills) and the **completion flag** (stamped when you turn the task in). They are filled in from your `/myquests` list when the tracker can tell which flags belong to the task. Type part of a flag in either box to see up to 5 matching flags (from your quest list first, then the built-in catalog and your task database), and click one to use it. A flag can belong to one task only; a flag that only an unused catalog task has is moved to yours.
+  - A task's counter flag is only in your quest list while the task is in progress. The search still finds it from the catalog.
 
 ### In the world
 

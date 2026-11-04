@@ -1,5 +1,14 @@
 # Changelog
 
+## 5.2.0
+
+- Areas with more than 14 tasks have pages (**<** and **>** under the bars) instead of "+N more".
+- Quest-flag boxes are search boxes: type part of a flag to see up to 5 matches and click one. Matches include flags not in your quest list right now (a task's counter flag only appears while the task is in progress). The two drop-downs are gone.
+- A flag that only an unused catalog task has can now be used for your task (it is moved, with a note).
+- Catalog fix (Conquest): `killtaskchaosdrag` is Luitbald's Chaos Dragon task (25 Elder Chaos Dragons), with `killtaskchaosdragwait` as its completion flag. It was listed as "Chaos Drudge Kill Task", plus a separate "quest timer" entry. Details you saved on the timer entry move to the corrected task.
+- Edit menus: "Reset progress" is now **Reset** and "Undo my changes" is now **Undo**.
+- Your own area stays selected after login (5.1.0 could switch to Hoshino before the task database loaded).
+
 ## 5.1.0
 
 - Task bars have no S and E buttons any more. Each bar has three click areas instead, left to right: **Select**, **Chat** and **Edit** (hover to see which). Rows are closer together.
