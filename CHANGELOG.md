@@ -1,5 +1,10 @@
 # Changelog
 
+## 5.2.3
+
+- Fixed: the window went blank about 2 seconds after starting near Elder Chaos Dragons. Moving the old Chaos Dragon timer entry to the corrected task left the deleted entry in the monster list, and the next look-up stopped the plugin. The lists are now rebuilt after the move, and a task that no longer exists is skipped instead of stopping the plugin.
+- The window's status line is on again. It stays empty while the tracker runs and shows the client's message if the plugin is ever stopped.
+
 ## 5.2.1
 
 - Fixed: the window could go blank about 2 seconds after starting. Building the quest-flag lists ran one pattern test per flag in your quest list, and with a long list that went over the client's limit for pattern work in one update, which stops the plugin. The lists now use plain text checks and are made one update after the quest file loads.

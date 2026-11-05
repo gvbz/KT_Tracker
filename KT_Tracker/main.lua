@@ -1,4 +1,4 @@
--- KT_Tracker 5.2.1: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 5.2.3: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client v146 or newer (chat_subscriptions, sender_type, use events,
 -- progress labels, clickable frames, overlays, hide_when_pinned).
 --
@@ -835,11 +835,10 @@ local function rebuild_indexes()
       local l = all[m] or {}; all[m] = l; if l[#l] ~= id then l[#l + 1] = id end
     end end
   end
-  if merge_duplicates() then
-    local kept = {}
-    for _, id in ipairs(ids) do if BASE[id] or CAT[id] or db.tasks[id] then kept[#kept + 1] = id end end
-    ids = kept
-  end
+  -- A merge removes tasks the monster index above already lists, so the
+  -- indexes are built again from the start (5.2.3: the removed Chaos Dragon
+  -- timer entry stayed in the index and stopped the plugin near the dragons).
+  if merge_duplicates() then return rebuild_indexes() end
   for _, id in ipairs(ids) do
     local t = task(id)
     if db.tasks[id] and db.tasks[id].custom then for _, m in ipairs(t.mobs or {}) do MOB[m] = MOB[m] or id end end
@@ -898,6 +897,7 @@ end
 ---------------------------------------------------------------------------
 local function status(id)
   local t = task(id)
+  if not t then return nil end   -- a task that no longer exists
   local p = st.prog[id]
   local d = t.done and (st.q[t.done] or QALL[t.done])
   -- A completion flag stamped after the last kill means the task was turned in;
