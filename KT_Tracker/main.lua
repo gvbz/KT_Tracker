@@ -1,4 +1,4 @@
--- KT_Tracker 5.2.3: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 5.3.0: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client v146 or newer (chat_subscriptions, sender_type, use events,
 -- progress labels, clickable frames, overlays, hide_when_pinned).
 --
@@ -648,7 +648,7 @@ local function all_ids()
 end
 
 -- Session
-local guard = {players = {}, pending = nil, BAR = {}, DSLOT = {}, dpage = 1, FLAG = {}, FLAG_HINT = "(your quest flags)"}
+local guard = {players = {}, pending = nil, BAR = {}, DSLOT = {}, dpage = 1, FLAG = {}}
 local started_at, unix_now, tick_now = nil, nil, 0
 local last_note = ""
 local function note(t) last_note = string.sub(t, 1, 240) end
@@ -818,6 +818,7 @@ local function merge_duplicates()
 end
 local function rebuild_indexes()
   ids_cache = nil
+  guard.dbrev = (guard.dbrev or 0) + 1   -- tasks or flags may have changed
   MOB, NPC_BY_NAME, NPC_BY_WCID, DONE_OWNER = {}, {}, {}, {}
   guard.FLAG = {}   -- counter flag -> task (5.0.0: flags can be edited)
   -- MOB[name] = the first task for a monster; MOB[0][name] = every task for it
@@ -882,21 +883,25 @@ local function name_ok(id, wcid)
   return false
 end
 local function npc_ids(name, wcid)
-  local out, seen = {}, {}
   wcid = math.floor(tonumber(wcid) or 0)
-  local strict = shared(name)
-  for _, id in ipairs(NPC_BY_NAME[norm(name)] or {}) do
+  local k = norm(name)
+  local by_name, by_wcid = NPC_BY_NAME[k], NPC_BY_WCID[wcid]
+  -- Most nearby NPCs give no kill task: answered without building anything (5.3.0).
+  if not by_name and not by_wcid then return {} end
+  local out, seen = {}, {}
+  local strict = SHARED[k] == true
+  for _, id in ipairs(by_name or {}) do
     if not seen[id] and (not strict or name_ok(id, wcid)) then seen[id] = true; out[#out + 1] = id end
   end
-  for _, id in ipairs(NPC_BY_WCID[math.floor(wcid or 0)] or {}) do if not seen[id] then seen[id] = true; out[#out + 1] = id end end
+  for _, id in ipairs(by_wcid or {}) do if not seen[id] then seen[id] = true; out[#out + 1] = id end end
   return out
 end
 
 ---------------------------------------------------------------------------
 -- Task status: active | turnin | cooldown | available
 ---------------------------------------------------------------------------
-local function status(id)
-  local t = task(id)
+local function status(id, t)
+  t = t or task(id)   -- the window passes the task it already looked up
   if not t then return nil end   -- a task that no longer exists
   local p = st.prog[id]
   local d = t.done and (st.q[t.done] or QALL[t.done])
@@ -1496,23 +1501,21 @@ local function quest_file_name()
   local n = my_name and string.sub(safe_name(my_name), 1, 30) or ""
   return (#sv > 0 and (sv .. "_") or "") .. (#n > 0 and (n .. "_") or "q_") .. string.format("%08X", my_player)
 end
-local function legacy_quest_file_name()
-  local n = my_name and safe_name(my_name) or ""
-  return (#n > 0 and (n .. "_") or "q_") .. string.format("%08X", my_player)
-end
 local function db_file_name()
   local sv = my_server and string.sub(safe_name(my_server), 1, 30) or ""
   return (#sv > 0) and (DB_NAME .. "_" .. sv) or DB_NAME
 end
 local function count_keys(t) local n = 0; for _ in pairs(t) do n = n + 1 end; return n end
--- Kill tasks on your quest list: tasks whose counter or completion flag the server listed.
-local function kill_tasks_read()
-  local n = 0
+-- Kill tasks on your quest list: tasks whose counter or completion flag the
+-- server listed (the window passes its own task look-up).
+local function kill_tasks_read(look)
+  look = look or task
+  local ids = {}
   for _, id in ipairs(all_ids()) do
-    local t = task(id)
-    if (t.key and st.q[t.key]) or (t.done and st.q[t.done]) then n = n + 1 end
+    local t = look(id)
+    if (t.key and st.q[t.key]) or (t.done and st.q[t.done]) then ids[#ids + 1] = id end
   end
-  return n
+  return ids
 end
 
 local function quest_file_data(server)
@@ -1641,22 +1644,13 @@ local function finish_myquests()
   end
   qfile.want_save = true
   ids_cache = nil; dirty = true
-  note("Kill tasks read: " .. kill_tasks_read() .. (gone > 0 and (", " .. gone .. " finished cleared") or ""))
+  note("Kill tasks read: " .. #kill_tasks_read() .. (gone > 0 and (", " .. gone .. " finished cleared") or ""))
 end
 
 ---------------------------------------------------------------------------
 -- Shared task database file (profiles service): read once, save when changed
 ---------------------------------------------------------------------------
 local dbf = {phase = "start", err = nil, save_at = nil, fails = 0}
-local legacy_custom = {}   -- tasks from the old shared database, adopted when this character has their flags
-local function adopt_legacy()
-  for tid, t in pairs(legacy_custom) do
-    if (t.key and QALL[t.key]) or (t.done and QALL[t.done]) or st.prog[tid] then
-      if not db.tasks[tid] then db.tasks[tid] = t; db_dirty = true; dirty = true; need_rebuild = true end
-      legacy_custom[tid] = nil
-    end
-  end
-end
 local function merge_db(src)
   if type(src) ~= "table" or type(src.tasks) ~= "table" then return end
   if type(src.areas) == "table" then
@@ -1694,7 +1688,6 @@ local function file_services(s, now)
     qfile.want_save = false
     request({id = "qf_save", service = "profiles", operation = "save", group = QUEST_GROUP, name = qfile.name, data = quest_file_data(s.server)})
   end
-  if next(legacy_custom) and qfile.phase == "ready" then adopt_legacy() end
 end
 
 local function handle_results(s)
@@ -1703,37 +1696,13 @@ local function handle_results(s)
       if not retry_if_limited(e) then
         local id = e.id
         if id == "db_read" then
-          if e.ok and type(e.data) == "table" then merge_db(e.data.kt_db); need_rebuild = true; dbf.phase = "ready"
-          else
-            -- First time on this server: take generic details (goals, giver IDs) from the
-            -- old shared file; its own tasks are adopted only if this character has them.
-            request({id = "db_read_old", service = "profiles", operation = "read", group = DB_GROUP, name = DB_NAME})
-          end
-        elseif id == "db_read_old" then
-          if e.ok and type(e.data) == "table" and type(e.data.kt_db) == "table" and type(e.data.kt_db.tasks) == "table" then
-            for tid, t in pairs(e.data.kt_db.tasks) do
-              if type(t) == "table" then
-                if BASE[tid] or CAT[tid] then
-                  local cur = db.tasks[tid] or {}
-                  for k, v in pairs(t) do if cur[k] == nil then cur[k] = v end end
-                  db.tasks[tid] = cur
-                elseif t.custom then legacy_custom[tid] = t end
-              end
-            end
-            need_rebuild = true; db_dirty = true
-          end
+          if e.ok and type(e.data) == "table" then merge_db(e.data.kt_db); need_rebuild = true; guard.db_loaded = true end
           dbf.phase = "ready"
         elseif id == "db_save" then
           if e.ok then dbf.err = nil; dbf.fails = 0
           else dbf.err = tostring(e.error); dbf.fails = dbf.fails + 1; if dbf.fails < 3 then db_dirty = true end end
         elseif id == "qf_read" then
-          if e.ok then on_quest_file(e.data); qfile.phase = "ready"; guard.busy_at = tick_now
-          else
-            request({id = "qf_read_old", service = "profiles", operation = "read", group = QUEST_GROUP, name = legacy_quest_file_name()})
-          end
-        elseif id == "qf_read_old" then
-          -- Old file name (no server): use it only if it was saved on this server.
-          if e.ok and type(e.data) == "table" and e.data.server == my_server then on_quest_file(e.data); qfile.want_save = true; guard.busy_at = tick_now end
+          if e.ok then on_quest_file(e.data); guard.busy_at = tick_now end
           qfile.phase = "ready"
         elseif id == "qf_save" then
           if e.ok then qfile.err = nil; qfile.saved = qfile.data_at or unix_now; qfile.count = count_keys(QALL)
@@ -1822,7 +1791,7 @@ function guard.suggest(id)
   -- Candidates are the (cached) kill-like flags offered in the pickers.
   local flags = guard.flag_lists()
   if not key and t.mobs and #t.mobs > 0 then
-    for i = 2, #flags.k do
+    for i = 1, #flags.k do
       local k = flags.k[i]
       local q = QALL[k]
       if not guard.FLAG[k] and not DONE_OWNER[k] and q and q.desc then
@@ -1838,7 +1807,7 @@ function guard.suggest(id)
       if #stem > #suf and string.sub(stem, -#suf) == suf then stem = string.sub(stem, 1, #stem - #suf); break end
     end
     if #stem >= 5 then
-      for i = 2, #flags.d do
+      for i = 1, #flags.d do
         local k = flags.d[i]
         if string.sub(k, 1, #stem) == stem and not DONE_OWNER[k] then done = k; break end
       end
@@ -2183,7 +2152,7 @@ function guard.flag_lists()
   local sig = tostring(mq.done_unix) .. "|" .. tostring(qfile.phase)
   if guard.flags and guard.flags_sig == sig then return guard.flags end
   -- Loading the quest file is the heaviest update; the lists wait for the next one.
-  if guard.busy_at == tick_now then guard.flags_pending = true; return guard.flags or {k = {guard.FLAG_HINT}, d = {guard.FLAG_HINT}} end
+  if guard.busy_at == tick_now then guard.flags_pending = true; return guard.flags or {k = {}, d = {}} end
   guard.flags_pending = false
   local k, d = {}, {}
   -- Plain text tests only: the client allows about 20 ms of regex work per
@@ -2197,55 +2166,79 @@ function guard.flag_lists()
     end
   end
   table.sort(k); table.sort(d)
-  local K, D = {guard.FLAG_HINT}, {guard.FLAG_HINT}
+  local K, D = {}, {}
   for i = 1, math.min(#k, 120) do K[#K + 1] = k[i] end
   for i = 1, math.min(#d, 120) do D[#D + 1] = d[i] end
   guard.flags, guard.flags_sig = {k = K, d = D}, sig
   return guard.flags
 end
-function guard.editor(pfx, f, picker, flags)
+-- One line per control (wrap = false on each); a text or section whose text
+-- may be clipped carries its full text as the tooltip (5.3.0: set where each
+-- control is made instead of walking the finished window).
+local function TT(c) if c.text and c.text ~= "" then c.tooltip = c.text end; return c end
+function guard.editor(pfx, f, picker)
   local B = TXT.body
   return {
-    {id = pfx .. "_name", type = "input", size = B, text = "Name", value = f.name or ""},
-    {id = pfx .. "_mobs", type = "input", size = B, text = "Monster name(s), comma separated", value = f.mobs or ""},
-    {id = pfx .. "_npc", type = "input", size = B, text = "Quest giver", value = f.npc or ""},
-    {id = pfx .. "_pick", type = "select", size = B, text = "...or pick a nearby NPC", value = picker[1], options = picker},
-    {id = pfx .. "_goal", type = "input", size = B, text = "Kills required", value = f.goal or ""},
-    {id = pfx .. "_cd", type = "input", size = B, text = "Cooldown hours (blank = default)", value = f.cd or ""},
-    {id = pfx .. "_area", type = "select", size = B, text = "Area", value = AREA_SET[f.area or ""] and f.area or "Other", options = AREAS},
-    {id = pfx .. "_key", type = "input", size = B, text = "Counter quest flag", value = f.key or "", live = true, placeholder = "Type to search",
+    {id = pfx .. "_name", type = "input", wrap = false, size = B, text = "Name", value = f.name or ""},
+    {id = pfx .. "_mobs", type = "input", wrap = false, size = B, text = "Monster name(s), comma separated", value = f.mobs or ""},
+    {id = pfx .. "_npc", type = "input", wrap = false, size = B, text = "Quest giver", value = f.npc or ""},
+    {id = pfx .. "_pick", type = "select", wrap = false, size = B, text = "...or pick a nearby NPC", value = picker[1], options = picker},
+    {id = pfx .. "_goal", type = "input", wrap = false, size = B, text = "Kills required", value = f.goal or ""},
+    {id = pfx .. "_cd", type = "input", wrap = false, size = B, text = "Cooldown hours (blank = default)", value = f.cd or ""},
+    {id = pfx .. "_area", type = "select", wrap = false, size = B, text = "Area", value = AREA_SET[f.area or ""] and f.area or "Other", options = AREAS},
+    {id = pfx .. "_key", type = "input", wrap = false, size = B, text = "Counter quest flag", value = f.key or "", live = true, placeholder = "Type to search",
       tooltip = "The quest flag that counts your kills"},
-    {id = pfx .. "_done", type = "input", size = B, text = "Completion quest flag", value = f.done or "", live = true, placeholder = "Type to search",
+    {id = pfx .. "_done", type = "input", wrap = false, size = B, text = "Completion quest flag", value = f.done or "", live = true, placeholder = "Type to search",
       tooltip = "The quest flag stamped when you turn the task in (its timer)"}}
 end
 -- 5.2.0: quest-flag search. Typing in a flag box lists up to 5 matching flags
 -- under it (your quest list first, then the catalog and task database), for
 -- that box only; clicking one fills it in.
 guard.LETTER = {"a", "b", "c", "d", "e"}
+-- 5.3.0: every known flag is collected once (sorted, quest-list flags first,
+-- each with its role) and only filtered as you type.
+function guard.flag_pool()
+  local sig = tostring(mq.done_unix) .. "|" .. tostring(qfile.phase) .. "|" .. tostring(guard.dbrev)
+  if guard.pool and guard.pool_sig == sig then return guard.pool end
+  local seen, mine, other = {}, {}, {}
+  local function add(k, listed)
+    if type(k) ~= "string" or seen[k] then return end
+    seen[k] = true
+    if listed then mine[#mine + 1] = k else other[#other + 1] = k end
+  end
+  for k in pairs(QALL) do add(k, true) end
+  for _, e in ipairs(CATALOG) do for _, k in ipairs(e.f) do add(k, false) end end
+  for _, t in ipairs(TASKS) do add(t.flag, false); add(t.done_flag, false) end
+  for _, d in pairs(db.tasks) do add(d.key, false); add(d.done, false) end
+  table.sort(mine); table.sort(other)
+  for _, k in ipairs(other) do mine[#mine + 1] = k end
+  guard.pool, guard.pool_sig = mine, sig
+  return mine
+end
 function guard.flag_matches(text, field)
   local fs = guard.fs
   if fs.res and fs.res_text == text then return fs.res end
-  local seen, mine, other = {}, {}, {}
-  local function consider(k, listed)
-    if type(k) ~= "string" or seen[k] or not contains(k, text) then return end
-    seen[k] = true
-    if (flag_role(k) == "done") ~= (field == "done") then return end
-    if listed then mine[#mine + 1] = k else other[#other + 1] = k end
+  local want_done, res = field == "done", {}
+  -- Typing more letters only narrows the last list of matches (all of them,
+  -- kept per box), so only the first search goes through every flag.
+  local pool = guard.flag_pool()
+  local nb = guard.narrow
+  local from = (nb and nb.pool == pool and #text > #nb.text and string.sub(text, 1, #nb.text) == nb.text) and nb.all or pool
+  local all = {}
+  for _, k in ipairs(from) do
+    if contains(k, text) then
+      all[#all + 1] = k
+      -- the role (counter or completion) is only worked out until 5 are found
+      if #res < 5 and (flag_role(k) == "done") == want_done then res[#res + 1] = k end
+    end
   end
-  for k in pairs(QALL) do consider(k, true) end
-  for _, e in ipairs(CATALOG) do for _, k in ipairs(e.f) do consider(k, false) end end
-  for _, t in ipairs(TASKS) do consider(t.flag, false); consider(t.done_flag, false) end
-  for _, d in pairs(db.tasks) do consider(d.key, false); consider(d.done, false) end
-  table.sort(mine); table.sort(other)
-  local res = {}
-  for _, k in ipairs(mine) do if #res < 5 then res[#res + 1] = k end end
-  for _, k in ipairs(other) do if #res < 5 then res[#res + 1] = k end end
+  guard.narrow = {pool = pool, text = text, all = all}
   fs.res, fs.res_text = res, text
   return res
 end
 -- The editor's fields plus, under the flag box being typed in, its matches.
-function guard.editor_with_search(pfx, f, picker, flags, mytid)
-  local list = guard.editor(pfx, f, picker, flags)
+function guard.editor_with_search(pfx, f, picker, mytid)
+  local list = guard.editor(pfx, f, picker)
   local fs = guard.fs
   if not (fs and fs.pfx == pfx and #fs.text >= 3) then return list end
   local out = {}
@@ -2257,10 +2250,10 @@ function guard.editor_with_search(pfx, f, picker, flags, mytid)
         local mid = pfx .. "_" .. string.sub(fs.field, 1, 1) .. guard.LETTER[n]
         guard.FM[mid] = {field = fs.field, flag = k}
         local owner = guard.FLAG[k] or DONE_OWNER[k]
-        out[#out + 1] = {id = mid, type = "text", size = TXT.body, text = "   " .. k .. ((owner and owner ~= mytid) and (" - " .. display(task(owner))) or ""),
+        out[#out + 1] = {id = mid, type = "text", wrap = false, size = TXT.body, text = "   " .. k .. ((owner and owner ~= mytid) and (" - " .. display(task(owner))) or ""),
           clickable = true, tooltip = "Use this flag"}
       end
-      if #res == 0 then out[#out + 1] = {id = pfx .. "_" .. string.sub(fs.field, 1, 1) .. "none", type = "text", size = TXT.small, text = "   No matching quest flags"} end
+      if #res == 0 then out[#out + 1] = TT{id = pfx .. "_" .. string.sub(fs.field, 1, 1) .. "none", type = "text", wrap = false, size = TXT.small, text = "   No matching quest flags"} end
     end
   end
   return out
@@ -2272,22 +2265,29 @@ guard.BAR_TEXT = {active = "white", turnin = "green", available = "yellow", cool
 local function build(s)
   local ui = {}
   EDIT_IDS, AREA_IDS, SEL_IDS, guard.BAR, guard.FM = {}, {}, {}, {}, {}
-  local flags = guard.flag_lists()
   local view = opt("view")
 
-  -- Status, name and area of every task once (sorting must not call task()).
-  local info = {}
-  for _, id in ipairs(all_ids()) do
-    local stt, p, left = status(id)
-    local t = task(id)
-    info[id] = {status = stt, p = p, left = left, name = display(t), area = area_of(t)}
+  -- 5.3.0: each task is looked up once per build (T), and its state is worked
+  -- out only when it is shown or sorted (I): the area's bars, Detected and the
+  -- search results.
+  local tcache, info = {}, {}
+  local function T(id) local t = tcache[id]; if not t then t = task(id); tcache[id] = t end; return t end
+  local function I(id)
+    local i = info[id]
+    if not i then
+      local t = T(id)
+      local stt, p, left = status(id, t)
+      i = {status = stt or "available", p = p, left = left, name = display(t), area = area_of(t)}
+      info[id] = i
+    end
+    return i
   end
   -- 5.1.0: no "Active" list. With no saved area (or the old Active), show the
   -- area of a task in progress, else the first area.
   if not AREA_SET[view] then
     view = nil
     for _, id in ipairs(all_ids()) do
-      local i = info[id]
+      local i = I(id)
       if i.status == "turnin" or i.status == "active" then view = i.area; break end
     end
     view = view or AREAS[1]
@@ -2296,9 +2296,9 @@ local function build(s)
   end
 
   -- Top: Show in NAV, then the area selector
-  ui[#ui + 1] = {id = "opt|show_nav", type = "checkbox", size = TXT.body, text = "Show in NAV", value = opt("show_nav") ~= false,
+  ui[#ui + 1] = {id = "opt|show_nav", type = "checkbox", wrap = false, size = TXT.body, text = "Show in NAV", value = opt("show_nav") ~= false,
     tooltip = "Arrows over task monsters, and the NAV arrow pointing to the closest one"}
-  ui[#ui + 1] = {id = "view", type = "select", size = TXT.body, value = view, options = VIEWS, tooltip = "Area"}
+  ui[#ui + 1] = {id = "view", type = "select", wrap = false, size = TXT.body, value = view, options = VIEWS, tooltip = "Area"}
 
   -- Names of NPCs around you, to pick the quest giver exactly as the game spells it.
   local picker, seen_p = {PICK_HINT, PICK_REFRESH}, {}
@@ -2309,14 +2309,14 @@ local function build(s)
   -- One collapsible line per task: monster and count; details when opened.
   local rows = {}
   for _, id in ipairs(all_ids()) do
-    local i = info[id]
-    if i.area == view then rows[#rows + 1] = id end
+    if area_of(T(id)) == view then rows[#rows + 1] = id end
   end
   -- Sort with precomputed text keys (the built-in comparison costs no Lua work).
   local ORDER = {turnin = 1, active = 2, available = 3, cooldown = 4}
   local keyed, by_key = {}, {}
   for _, id in ipairs(rows) do
-    local k = ORDER[info[id].status] .. string.lower(info[id].name) .. "|" .. id
+    local i = I(id)
+    local k = ORDER[i.status] .. string.lower(i.name) .. "|" .. id
     keyed[#keyed + 1] = k; by_key[k] = id
   end
   table.sort(keyed)
@@ -2330,7 +2330,7 @@ local function build(s)
   for n = first + 1, math.min(#rows, first + MAX_ROWS) do
     local id = rows[n]
     shown = shown + 1
-    local t, i = task(id), info[id]
+    local t, i = T(id), I(id)
     -- 5.1.0: one bar per task (name and progress) with three invisible click
     -- areas over it, left to right: Select, Chat (details in chat), Edit.
     local label, frac = display(t), 0
@@ -2346,45 +2346,45 @@ local function build(s)
     guard.BAR[cb], SEL_IDS[sb], EDIT_IDS[eb] = id, id, id
     local function zone(zid, tip) return {id = zid, type = "frame", color = "#00000000", clickable = true, height = 16, padding = 0, tooltip = tip} end
     ui[#ui + 1] = {id = uid("r|", id), type = "overlay", padding = 0, children = {
-      {id = uid("bar|", id), type = "progress", size = TXT.body, padding = 0, value = frac, text = label,
+      {id = uid("bar|", id), type = "progress", wrap = false, size = TXT.body, padding = 0, value = frac, text = label,
         color = guard.BAR_FILL[i.status], text_color = guard.BAR_TEXT[i.status]},
       {id = uid("z|", id), type = "row", padding = 0, children = {zone(sb, "Select"), zone(cb, "Chat"), zone(eb, "Edit")}}}}
     if edit_id == id then
       -- Edit in place, under the bar: the fields of this task, saved to the task database.
       local is_custom = db.tasks[id] and db.tasks[id].custom
-      local ebtn = {{id = "ie_save", type = "button", size = TXT.body, text = "Save"}, {id = "ie_cancel", type = "button", size = TXT.body, text = "Cancel"},
-        {id = "ie_reset", type = "button", size = TXT.body, text = "Reset", tooltip = "Clear this task's kill count and timer for this character"}}
-      if is_custom then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", size = TXT.body, text = "Delete"}
-      elseif db.tasks[id] then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", size = TXT.body, text = "Undo", tooltip = "Back to the original task details"} end
-      local body = guard.editor_with_search("ie", edraft, picker, flags, id)
+      local ebtn = {{id = "ie_save", type = "button", wrap = false, size = TXT.body, text = "Save"}, {id = "ie_cancel", type = "button", wrap = false, size = TXT.body, text = "Cancel"},
+        {id = "ie_reset", type = "button", wrap = false, size = TXT.body, text = "Reset", tooltip = "Clear this task's kill count and timer for this character"}}
+      if is_custom then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", wrap = false, size = TXT.body, text = "Delete"}
+      elseif db.tasks[id] then ebtn[#ebtn + 1] = {id = "ie_del", type = "button", wrap = false, size = TXT.body, text = "Undo", tooltip = "Back to the original task details"} end
+      local body = guard.editor_with_search("ie", edraft, picker, id)
       body[#body + 1] = {id = "ie_btns", type = "row", children = ebtn}
       ui[#ui + 1] = {id = "ie_box", type = "column", children = body}
     end
   end
   if bpages > 1 then
     ui[#ui + 1] = {id = "bp", type = "row", children = {
-      {id = "bp_prev", type = "button", size = TXT.body, text = "<", auto_width = true, enabled = guard.bpage > 1},
-      {id = "bp_n", type = "text", size = TXT.body, text = guard.bpage .. " / " .. bpages .. "  (" .. #rows .. " tasks)"},
-      {id = "bp_next", type = "button", size = TXT.body, text = ">", auto_width = true, enabled = guard.bpage < bpages}}}
+      {id = "bp_prev", type = "button", wrap = false, size = TXT.body, text = "<", auto_width = true, enabled = guard.bpage > 1},
+      TT{id = "bp_n", type = "text", wrap = false, size = TXT.body, text = guard.bpage .. " / " .. bpages .. "  (" .. #rows .. " tasks)"},
+      {id = "bp_next", type = "button", wrap = false, size = TXT.body, text = ">", auto_width = true, enabled = guard.bpage < bpages}}}
   end
   if shown == 0 then
-    ui[#ui + 1] = {id = "empty", type = "text", size = TXT.body, text = "No tasks here yet."}
+    ui[#ui + 1] = TT{id = "empty", type = "text", wrap = false, size = TXT.body, text = "No tasks here yet."}
   end
-  if #last_note > 0 then ui[#ui + 1] = {id = "note", type = "text", text = last_note, size = TXT.small} end
-  if s.error and s.error ~= "" then ui[#ui + 1] = {id = "err", type = "text", size = TXT.body, color = "red", text = string.sub(s.error, 1, 200)} end
+  if #last_note > 0 then ui[#ui + 1] = TT{id = "note", type = "text", wrap = false, text = last_note, size = TXT.small} end
+  if s.error and s.error ~= "" then ui[#ui + 1] = TT{id = "err", type = "text", wrap = false, size = TXT.body, color = "red", text = string.sub(s.error, 1, 200)} end
 
   -- Manage > Add: a new task, and areas of your own.
-  local editor = {{id = "ed_head", type = "text", size = TXT.body, text = "New task", bold = true}}
-  for _, c in ipairs(guard.editor_with_search("ed", draft, picker, flags)) do editor[#editor + 1] = c end
-  editor[#editor + 1] = {id = "ed_save", type = "button", size = TXT.body, text = "Add task"}
-  editor[#editor + 1] = {id = "na_head", type = "text", size = TXT.body, text = "Areas", bold = true}
+  local editor = {TT{id = "ed_head", type = "text", wrap = false, size = TXT.body, text = "New task", bold = true}}
+  for _, c in ipairs(guard.editor_with_search("ed", draft, picker)) do editor[#editor + 1] = c end
+  editor[#editor + 1] = {id = "ed_save", type = "button", wrap = false, size = TXT.body, text = "Add task"}
+  editor[#editor + 1] = TT{id = "na_head", type = "text", wrap = false, size = TXT.body, text = "Areas", bold = true}
   editor[#editor + 1] = {id = "na_row", type = "row", children = {
-    {id = "na_name", type = "input", size = TXT.body, text = "New area", value = new_area},
-    {id = "na_add", type = "button", size = TXT.body, text = "Add area"}}}
+    {id = "na_name", type = "input", wrap = false, size = TXT.body, text = "New area", value = new_area},
+    {id = "na_add", type = "button", wrap = false, size = TXT.body, text = "Add area"}}}
   for k, a in ipairs(db.areas or {}) do
     local bid = "ar|" .. k
     AREA_IDS[bid] = a
-    editor[#editor + 1] = {id = bid, type = "button", size = TXT.body, text = "Remove " .. a, tooltip = "Its tasks go back to their own area, or Other"}
+    editor[#editor + 1] = {id = bid, type = "button", wrap = false, size = TXT.body, text = "Remove " .. a, tooltip = "Its tasks go back to their own area, or Other"}
   end
 
   -- Detected: tasks found in your quest list or chat that still miss a monster
@@ -2392,10 +2392,11 @@ local function build(s)
   -- menu, 5 per page (a window holds at most 256 controls).
   local detected, dkeys, dmap = {}, {}, {}
   for _, id in ipairs(all_ids()) do
-    local t, d = task(id), db.tasks[id]
+    local t, d = T(id), db.tasks[id]
     local mine = (d and d.custom) or st.prog[id] or (t.key and st.q[t.key])
     if mine and not (d and d.nofill) and (not t.mobs or #t.mobs == 0 or not t.npc) then
-      local k = ORDER[info[id].status] .. string.lower(info[id].name) .. "|" .. id
+      local i = I(id)
+      local k = ORDER[i.status] .. string.lower(i.name) .. "|" .. id
       dkeys[#dkeys + 1] = k; dmap[k] = id
     end
   end
@@ -2410,38 +2411,34 @@ local function build(s)
     if not k then break end
     local tid = dmap[k]
     guard.DSLOT[n] = tid
-    local t = task(tid)
+    local t = T(tid)
     -- A form made while the flag lists wait is not kept (it would miss its suggested flags).
     local form = fill[tid] or form_from(tid)
     if not guard.flags_pending then fill[tid] = form end
     local pfx = "d" .. n
-    local body = guard.editor_with_search(pfx, form, picker, flags, tid)
+    local body = guard.editor_with_search(pfx, form, picker, tid)
     local q = t.key and (st.q[t.key] or QALL[t.key])
-    if q and q.desc and q.desc ~= info[tid].name then
-      table.insert(body, 1, {id = pfx .. "_desc", type = "text", size = TXT.small, text = t.key .. ": " .. q.desc})
+    if q and q.desc and q.desc ~= I(tid).name then
+      table.insert(body, 1, TT{id = pfx .. "_desc", type = "text", wrap = false, size = TXT.small, text = t.key .. ": " .. q.desc})
     end
     body[#body + 1] = {id = pfx .. "_btns", type = "row", children = {
-      {id = pfx .. "_save", type = "button", size = TXT.body, text = "Save"},
-      {id = pfx .. "_rm", type = "button", size = TXT.body, text = "Remove", tooltip = "Remove from Detected"}}}
-    detected[#detected + 1] = {id = uid("dsec|", tid), type = "section", size = TXT.body,
-      text = info[tid].name .. " - " .. WORD[info[tid].status], expanded = false, children = body}
+      {id = pfx .. "_save", type = "button", wrap = false, size = TXT.body, text = "Save"},
+      {id = pfx .. "_rm", type = "button", wrap = false, size = TXT.body, text = "Remove", tooltip = "Remove from Detected"}}}
+    detected[#detected + 1] = TT{id = uid("dsec|", tid), type = "section", wrap = false, size = TXT.body,
+      text = I(tid).name .. " - " .. WORD[I(tid).status], expanded = false, children = body}
   end
   if dpages > 1 then
     detected[#detected + 1] = {id = "dp", type = "row", children = {
-      {id = "dp_prev", type = "button", size = TXT.body, text = "<", auto_width = true, enabled = guard.dpage > 1},
-      {id = "dp_n", type = "text", size = TXT.body, text = guard.dpage .. " / " .. dpages},
-      {id = "dp_next", type = "button", size = TXT.body, text = ">", auto_width = true, enabled = guard.dpage < dpages}}}
+      {id = "dp_prev", type = "button", wrap = false, size = TXT.body, text = "<", auto_width = true, enabled = guard.dpage > 1},
+      TT{id = "dp_n", type = "text", wrap = false, size = TXT.body, text = guard.dpage .. " / " .. dpages},
+      {id = "dp_next", type = "button", wrap = false, size = TXT.body, text = ">", auto_width = true, enabled = guard.dpage < dpages}}}
   end
-  if #detected == 0 then detected[1] = {id = "fnone", type = "text", size = TXT.body, text = "Nothing to fill in.",
+  if #detected == 0 then detected[1] = {id = "fnone", type = "text", wrap = false, size = TXT.body, text = "Nothing to fill in.",
     tooltip = "Kill tasks found in your quest list or in chat appear here when their monster or quest giver is unknown."} end
 
   -- Kill tasks on your quest list (counter or completion flag listed), for the
   -- count and the search below.
-  local readids = {}
-  for _, id in ipairs(all_ids()) do
-    local t = task(id)
-    if (t.key and st.q[t.key]) or (t.done and st.q[t.done]) then readids[#readids + 1] = id end
-  end
+  local readids = kill_tasks_read(T)
   local nkill = #readids
   local qline
   if mq.active then
@@ -2458,12 +2455,12 @@ local function build(s)
     qline = qline .. " (asked " .. dur(tick_now - mq.req_at) .. " ago, no reply seen)"
   end
   local log = {
-    {id = "lg1", type = "text", size = TXT.body, text = qline},
-    {id = "lg1b", type = "text", size = TXT.small, text = ((mq.done_unparsed or 0) > 0) and (mq.done_unparsed .. " lines not understood (example: "
+    TT{id = "lg1", type = "text", wrap = false, size = TXT.body, text = qline},
+    TT{id = "lg1b", type = "text", wrap = false, size = TXT.small, text = ((mq.done_unparsed or 0) > 0) and (mq.done_unparsed .. " lines not understood (example: "
       .. tostring(mq.unparsed_sample) .. ")") or ""},
-    {id = "lg2", type = "text", size = TXT.small, text = "Quest file: " .. (qfile.name and ("Profiles/kt_tracker/Library/Quests/" .. qfile.name .. ".json") or "waiting for character")
+    TT{id = "lg2", type = "text", wrap = false, size = TXT.small, text = "Quest file: " .. (qfile.name and ("Profiles/kt_tracker/Library/Quests/" .. qfile.name .. ".json") or "waiting for character")
       .. (qfile.err and (" - save failed: " .. qfile.err) or "")},
-    {id = "lg3", type = "text", size = TXT.small, text = "Task database: Profiles/kt_tracker/Library/Database/" .. db_file_name() .. ".json" .. (dbf.err and (" - save failed: " .. dbf.err) or "")}}
+    TT{id = "lg3", type = "text", wrap = false, size = TXT.small, text = "Task database: Profiles/kt_tracker/Library/Database/" .. db_file_name() .. ".json" .. (dbf.err and (" - save failed: " .. dbf.err) or "")}}
 
   if log[2].text == "" then table.remove(log, 2) end
 
@@ -2474,17 +2471,18 @@ local function build(s)
   local qkeys, qmap = {}, {}
   for _, id in ipairs(readids) do
     local hit = #want == 0
+    local t = T(id)
+    local name = display(t)
     if not hit then
-      local t = task(id)
-      hit = contains(string.lower(info[id].name .. " " .. join_mobs(t.mobs) .. " " .. (t.npc or "") .. " " .. (t.key or "") .. " " .. (t.done or "")), want)
+      hit = contains(string.lower(name .. " " .. join_mobs(t.mobs) .. " " .. (t.npc or "") .. " " .. (t.key or "") .. " " .. (t.done or "")), want)
     end
-    if hit then local k = string.lower(info[id].name) .. "|" .. id; qkeys[#qkeys + 1] = k; qmap[k] = id end
+    if hit then local k = string.lower(name) .. "|" .. id; qkeys[#qkeys + 1] = k; qmap[k] = id end
   end
   table.sort(qkeys)
   local qper = 6
   local qpages = math.max(1, math.ceil(#qkeys / qper))
   guard.qpage = math.max(1, math.min(guard.qpage or 1, qpages))
-  log[#log + 1] = {id = "qs_text", type = "input", size = TXT.body, text = "Search kill tasks read (" .. #qkeys .. ")", value = guard.qs or "",
+  log[#log + 1] = {id = "qs_text", type = "input", wrap = false, size = TXT.body, text = "Search kill tasks read (" .. #qkeys .. ")", value = guard.qs or "",
     tooltip = "Name, monster, quest giver or quest flag"}
   for n = 1, qper do
     local k = qkeys[(guard.qpage - 1) * qper + n]
@@ -2492,60 +2490,46 @@ local function build(s)
     local tid = qmap[k]
     local rid = uid("qr|", tid)
     guard.QRES[rid] = tid
-    log[#log + 1] = {id = rid, type = "text", size = TXT.body, text = info[tid].name .. " - " .. WORD[info[tid].status],
+    log[#log + 1] = {id = rid, type = "text", wrap = false, size = TXT.body, text = I(tid).name .. " - " .. WORD[I(tid).status],
       bold = guard.qsel == tid, clickable = true, tooltip = "Edit"}
   end
   if qpages > 1 then
     log[#log + 1] = {id = "qp", type = "row", children = {
-      {id = "qp_prev", type = "button", size = TXT.body, text = "<", auto_width = true, enabled = guard.qpage > 1},
-      {id = "qp_n", type = "text", size = TXT.body, text = guard.qpage .. " / " .. qpages},
-      {id = "qp_next", type = "button", size = TXT.body, text = ">", auto_width = true, enabled = guard.qpage < qpages}}}
+      {id = "qp_prev", type = "button", wrap = false, size = TXT.body, text = "<", auto_width = true, enabled = guard.qpage > 1},
+      TT{id = "qp_n", type = "text", wrap = false, size = TXT.body, text = guard.qpage .. " / " .. qpages},
+      {id = "qp_next", type = "button", wrap = false, size = TXT.body, text = ">", auto_width = true, enabled = guard.qpage < qpages}}}
   end
-  if guard.qsel and info[guard.qsel] then
+  if guard.qsel and T(guard.qsel) then
     local qd = db.tasks[guard.qsel]
-    local qb = {{id = "qe_save", type = "button", size = TXT.body, text = "Save"}, {id = "qe_cancel", type = "button", size = TXT.body, text = "Cancel"},
-      {id = "qe_reset", type = "button", size = TXT.body, text = "Reset", tooltip = "Clear this task's kill count and timer for this character"}}
-    if qd and qd.custom then qb[#qb + 1] = {id = "qe_del", type = "button", size = TXT.body, text = "Delete"}
-    elseif qd then qb[#qb + 1] = {id = "qe_del", type = "button", size = TXT.body, text = "Undo", tooltip = "Back to the original task details"} end
-    local body = {{id = "qe_head", type = "text", size = TXT.body, text = "Edit " .. info[guard.qsel].name, bold = true}}
-    for _, c in ipairs(guard.editor_with_search("qe", guard.qdraft, picker, flags, guard.qsel)) do body[#body + 1] = c end
+    local qb = {{id = "qe_save", type = "button", wrap = false, size = TXT.body, text = "Save"}, {id = "qe_cancel", type = "button", wrap = false, size = TXT.body, text = "Cancel"},
+      {id = "qe_reset", type = "button", wrap = false, size = TXT.body, text = "Reset", tooltip = "Clear this task's kill count and timer for this character"}}
+    if qd and qd.custom then qb[#qb + 1] = {id = "qe_del", type = "button", wrap = false, size = TXT.body, text = "Delete"}
+    elseif qd then qb[#qb + 1] = {id = "qe_del", type = "button", wrap = false, size = TXT.body, text = "Undo", tooltip = "Back to the original task details"} end
+    local body = {TT{id = "qe_head", type = "text", wrap = false, size = TXT.body, text = "Edit " .. display(T(guard.qsel)), bold = true}}
+    for _, c in ipairs(guard.editor_with_search("qe", guard.qdraft, picker, guard.qsel)) do body[#body + 1] = c end
     body[#body + 1] = {id = "qe_btns", type = "row", children = qb}
     log[#log + 1] = {id = "qe_box", type = "column", children = body}
   elseif guard.qsel then guard.qsel = nil end
-  local colsel = function(key, text) return {id = "opt|" .. key, type = "select", size = TXT.body, text = text, value = opt(key), options = COLORS} end
+  local colsel = function(key, text) return {id = "opt|" .. key, type = "select", wrap = false, size = TXT.body, text = text, value = opt(key), options = COLORS} end
   local options = {
-    {id = "opt|npc_marks", type = "checkbox", size = TXT.body, text = "NPC indication !", value = opt("npc_marks"), tooltip = "! over quest givers, colored by task state"},
-    {id = "opt|auto_myq", type = "checkbox", size = TXT.body, text = "Automatic /myquests update", value = opt("auto_myq") ~= false,
+    {id = "opt|npc_marks", type = "checkbox", wrap = false, size = TXT.body, text = "NPC indication !", value = opt("npc_marks"), tooltip = "! over quest givers, colored by task state"},
+    {id = "opt|auto_myq", type = "checkbox", wrap = false, size = TXT.body, text = "Automatic /myquests update", value = opt("auto_myq") ~= false,
       tooltip = "Reads your quest list after login and on the interval"},
-    {id = "opt|myq_s", type = "number", size = TXT.body, text = "/myquests update interval", min = 1, max = 300, step = 1, value = tonumber(opt("myq_s")) or 65,
+    {id = "opt|myq_s", type = "number", wrap = false, size = TXT.body, text = "/myquests update interval", min = 1, max = 300, step = 1, value = tonumber(opt("myq_s")) or 65,
       tooltip = "Seconds (1-300). The server answers one /myquests per minute.", enabled = opt("auto_myq") ~= false},
-    {id = "opt|myq_hide", type = "checkbox", size = TXT.body, text = "Hide /myquests in chat", value = opt("myq_hide") ~= false,
+    {id = "opt|myq_hide", type = "checkbox", wrap = false, size = TXT.body, text = "Hide /myquests in chat", value = opt("myq_hide") ~= false,
       tooltip = "Hides the tracker's own /myquests replies from the chat windows. A /myquests you type always shows."},
-    {id = "opt|range", type = "slider", size = TXT.body, text = "Scan range (m)", min = 20, max = 240, step = 10, value = tonumber(opt("range")) or 150},
-    {id = "opt|cooldown_hours", type = "number", size = TXT.body, text = "Default cooldown after turn-in (hours)", min = 0, max = 168, step = 1, value = tonumber(opt("cooldown_hours")) or 20},
+    {id = "opt|range", type = "slider", wrap = false, size = TXT.body, text = "Scan range (m)", min = 20, max = 240, step = 10, value = tonumber(opt("range")) or 150},
+    {id = "opt|cooldown_hours", type = "number", wrap = false, size = TXT.body, text = "Default cooldown after turn-in (hours)", min = 0, max = 168, step = 1, value = tonumber(opt("cooldown_hours")) or 20},
     colsel("col_available", "! color: available"), colsel("col_progress", "! color: in progress"),
     colsel("col_turnin", "! color: ready to turn in"), colsel("col_cooldown", "! color: on cooldown")}
-  ui[#ui + 1] = {id = "manage", type = "section", size = TXT.body, text = "Manage", expanded = false, hide_when_pinned = true, children = {
+  ui[#ui + 1] = TT{id = "manage", type = "section", wrap = false, size = TXT.body, text = "Manage", expanded = false, hide_when_pinned = true, children = {
     {id = "mtabs", type = "tabs", children = {
       {id = "m_found", type = "column", text = "Detected" .. ((#dkeys > 0) and (" (" .. #dkeys .. ")") or ""), children = detected},
       {id = "m_tasks", type = "column", text = "Add", children = editor},
       {id = "m_log", type = "column", text = "Quest log", children = log},
       {id = "m_opt", type = "column", text = "Options", children = options}}}}}
 
-  -- One line per control: long text is clipped instead of wrapping (which made
-  -- the window very long); hovering shows the full text.
-  local function one_line(list)
-    for _, c in ipairs(list) do
-      if c.type == "row" or c.type == "column" or c.type == "tabs" or c.type == "overlay" or c.type == "frame" then
-        if c.children then one_line(c.children) end
-      else
-        c.wrap = false
-        if (c.type == "text" or c.type == "section") and not c.tooltip and c.text and c.text ~= "" then c.tooltip = c.text end
-        if c.children then one_line(c.children) end
-      end
-    end
-  end
-  one_line(ui)
   return ui
 end
 
@@ -2605,27 +2589,18 @@ return function(s, p)
     for k, v in pairs(saved.q or {}) do
       if type(v) == "table" then st.q[k] = {s = tonumber(v.s) or 0, t = tonumber(v.t) or 0, m = tonumber(v.m), d = tonumber(v.d), desc = v.desc} end
     end
-    if st.opt.view == "Custom" then st.opt.view = "Other" elseif st.opt.view == "All" or st.opt.view == "Active" then st.opt.view = nil end
-    st.opt.mini_area, st.opt.info_mode, st.opt.reread_reward = nil, nil, nil
-    -- 4.7: interval choices are "Off" or 2-minute steps; older values fall back to the default (4 min).
-    -- 4.14: the interval is in seconds (default 65) with its own on/off switch;
-    -- the quest list is always read after login.
-    if st.opt.refresh_min == "Off" then st.opt.auto_myq = false end
-    -- 4.15: "Show in NAV" replaces the NAV-arrow and monster-arrow options; no Start/Stop.
-    if st.opt.show_nav == nil and st.opt.nav == false and st.opt.arrows == false then st.opt.show_nav = false end
-    st.opt.nav, st.opt.arrows, st.opt.paused = nil, nil, nil
-    st.opt.chat_log = nil   -- 4.17: chat log removed
-    st.opt.refresh_min, st.opt.login_refresh, st.opt.v47 = nil, nil, nil
+    if st.opt.view == "Active" then st.opt.view = nil end   -- 5.1.0: no Active list
     db = type(saved.db) == "table" and saved.db or {tasks = {}}
     refresh_areas()
     db.tasks = db.tasks or {}
-    -- 3.x kept the task database as the plugin's profile; take it over once.
-    if type(p.kt_db) == "table" then merge_db(p.kt_db); db_dirty = true; out.profile_patch = {kt_db = {}, kt_db_file = false} end
-    for _, d in pairs(db.tasks) do if d.area == "Custom" then d.area = "Other" end end
     started_at = now
     rebuild_indexes()
   end
-  if need_rebuild then rebuild_indexes(); need_rebuild = false; guard.reindexed = true end
+  if need_rebuild then
+    rebuild_indexes(); need_rebuild = false; guard.reindexed = true
+    -- Indexing the just-loaded task database is heavy too; the window waits one update.
+    if guard.db_loaded then guard.db_loaded = nil; guard.busy_at = now end
+  end
   -- Once this server's task database is loaded (its givers are indexed), drop
   -- saved giver cooldowns that don't belong to a kill-task giver.
   if not guard.purged and dbf.phase == "ready" then guard.fix_fort_db(); guard.purge_cd(); guard.purged = true end
@@ -2635,15 +2610,18 @@ return function(s, p)
   local scan = {monsters = {}, npcs = {}}
   my_x, my_y = global_xy(s.position)
   local others = {}
-  guard.players = {}
-  for _, o in ipairs(s.objects or {}) do if o.player and type(o.name) == "string" then guard.players[string.lower(o.name)] = true end end
+  -- Players are collected in the same pass; pets are told by their owner's
+  -- name from this pass so far and the last one.
+  local players = {}
   -- 4.17.10: the client labels each object (build 137 object_type); items,
   -- doors, portals, containers, lifestones, corpses and players are skipped
   -- before any name work. Without the label (older builds) every object is
   -- looked at, as before.
   for _, o in ipairs(s.objects or {}) do
     local ot = o.object_type
-    if (ot == nil or ot == "creature" or ot == "vendor") and type(o.name) == "string" and not o.player and not guard.is_pet(o.name) then
+    if o.player then
+      if type(o.name) == "string" then local ln = string.lower(o.name); players[ln] = true; guard.players[ln] = true end
+    elseif (ot == nil or ot == "creature" or ot == "vendor") and type(o.name) == "string" and not guard.is_pet(o.name) then
       local d = o.distance or 1e9
       if o.monster then
         if not o.dead and d <= range then scan.monsters[#scan.monsters + 1] = o end
@@ -2652,6 +2630,7 @@ return function(s, p)
       end
     end
   end
+  guard.players = players
 
   if type(s.character_name) == "string" and #s.character_name > 0 then my_name = s.character_name
   elseif type(s.char_strings) == "table" and type(s.char_strings["1"]) == "string" and #s.char_strings["1"] > 0 then my_name = s.char_strings["1"] end
@@ -2700,17 +2679,28 @@ return function(s, p)
   elseif every and not mq.active and mq.req_at and now - mq.req_at >= math.max(every, MYQ_MIN_GAP) then request_myquests("timer", now)
   elseif every and not mq.req_at and now - started_at > 8 then request_myquests("timer", now) end
 
-  auto_link_descriptions(scan.monsters)
+  -- Linking monsters named in quest descriptions: when the nearby monsters
+  -- change (their count, or the nearest one), else every 5 seconds.
+  local mk = #scan.monsters .. "|" .. tostring(scan.monsters[1] and scan.monsters[1].id)
+  if mk ~= guard.al_key or now - (guard.al_at or -1e9) >= 5 then
+    guard.al_key, guard.al_at = mk, now
+    auto_link_descriptions(scan.monsters)
+  end
   -- 4.17.9: the window is rebuilt only when something it shows may have
   -- changed: saved data or the task database changed, a click or file result
   -- arrived, the quest-list read state, a note, an error, an edit, the minute
-  -- (cooldown times), and at least every 5 seconds as a safety net.
+  -- (cooldown times), and at least every 15 seconds as a safety net (5.3.0;
+  -- was 5). The update that loads the quest file (the heaviest one) leaves the
+  -- window to the next update.
   -- Markers are worked out every callback and sent only when they change.
   local sig = table.concat({tostring(opt("view")), tostring(mq.active), last_note, tostring(s.error), tostring(edit_id),
     tostring(qfile.name), tostring(qfile.saved), tostring(qfile.err), tostring(qfile.phase), tostring(dbf.err), tostring(dbf.phase),
     tostring(mq.done_unix), tostring(mq.done_ok), tostring(mq.req_at), tostring(picker_names and #picker_names),
     tostring(unix_now and math.floor(unix_now / 60))}, "|")
-  if dirty or guard.reindexed or next(s.events or {}) or sig ~= guard.ui_sig or not guard.ui_at or now - guard.ui_at >= 5 then
+  local busy = guard.ui_at and guard.busy_at == now
+  if busy then guard.ui_force = true end
+  if not busy and (guard.ui_force or dirty or guard.reindexed or next(s.events or {}) or sig ~= guard.ui_sig or not guard.ui_at or now - guard.ui_at >= 15) then
+    guard.ui_force = nil
     out.ui = build(s)
     if not guard.ui_at then out.status = "" end
     guard.ui_sig, guard.ui_at, guard.reindexed = sig, now, false

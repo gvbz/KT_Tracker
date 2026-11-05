@@ -1,5 +1,21 @@
 # Changelog
 
+## 5.3.0
+
+Lighter, with the same response times (kill counts, clicks and NPC uses still show in the same half-second update).
+
+- The window works out task states only for the tasks it shows, and looks each task up once per rebuild.
+- One-line text and tooltips are set as each control is made, instead of a pass over the finished window.
+- The quest-flag lists are only made when a suggestion needs them.
+- The safety-net window rebuild runs every 15 s instead of 5 s; kills, clicks, reads and the minute still rebuild it at once.
+- Quest-description linking runs when nearby monsters change, or every 5 s.
+- Quest-flag search collects the known flags once and narrows the list as you type.
+- Start-up: the window waits one update after the quest file loads and after the task database is indexed.
+- Nearby NPCs that give no kill task are skipped faster, and players are found in the same pass as everything else.
+- Removed code for 3.x and early 4.x data (old shared database and quest file names, old options).
+
+Measured with a 586-quest list (Lua steps per update, average / highest): hunting 13.7k / 118k → 8.8k / 69k; hunting with kills 20.9k / 116k → 15.8k / 72k; town 28.7k / 132k → 19.0k / 81k; start-up highest 155k → 102k.
+
 ## 5.2.3
 
 - Fixed: the window went blank about 2 seconds after starting near Elder Chaos Dragons. Moving the old Chaos Dragon timer entry to the corrected task left the deleted entry in the monster list, and the next look-up stopped the plugin. The lists are now rebuilt after the move, and a task that no longer exists is skipped instead of stopping the plugin.
