@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.2.1
+
+- Fixed: the window could go blank about 2 seconds after starting. Building the quest-flag lists ran one pattern test per flag in your quest list, and with a long list that went over the client's limit for pattern work in one update, which stops the plugin. The lists now use plain text checks and are made one update after the quest file loads.
+
 ## 5.2.0
 
 - Areas with more than 14 tasks have pages (**<** and **>** under the bars) instead of "+N more".

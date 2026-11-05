@@ -1,4 +1,4 @@
--- KT_Tracker 5.2.0: kill-task tracker for the AC:Unreal client (API 2 companion).
+-- KT_Tracker 5.2.1: kill-task tracker for the AC:Unreal client (API 2 companion).
 -- Needs client v146 or newer (chat_subscriptions, sender_type, use events,
 -- progress labels, clickable frames, overlays, hide_when_pinned).
 --
@@ -1727,13 +1727,13 @@ local function handle_results(s)
           if e.ok then dbf.err = nil; dbf.fails = 0
           else dbf.err = tostring(e.error); dbf.fails = dbf.fails + 1; if dbf.fails < 3 then db_dirty = true end end
         elseif id == "qf_read" then
-          if e.ok then on_quest_file(e.data); qfile.phase = "ready"
+          if e.ok then on_quest_file(e.data); qfile.phase = "ready"; guard.busy_at = tick_now
           else
             request({id = "qf_read_old", service = "profiles", operation = "read", group = QUEST_GROUP, name = legacy_quest_file_name()})
           end
         elseif id == "qf_read_old" then
           -- Old file name (no server): use it only if it was saved on this server.
-          if e.ok and type(e.data) == "table" and e.data.server == my_server then on_quest_file(e.data); qfile.want_save = true end
+          if e.ok and type(e.data) == "table" and e.data.server == my_server then on_quest_file(e.data); qfile.want_save = true; guard.busy_at = tick_now end
           qfile.phase = "ready"
         elseif id == "qf_save" then
           if e.ok then qfile.err = nil; qfile.saved = qfile.data_at or unix_now; qfile.count = count_keys(QALL)
@@ -2182,10 +2182,14 @@ end
 function guard.flag_lists()
   local sig = tostring(mq.done_unix) .. "|" .. tostring(qfile.phase)
   if guard.flags and guard.flags_sig == sig then return guard.flags end
+  -- Loading the quest file is the heaviest update; the lists wait for the next one.
+  if guard.busy_at == tick_now then guard.flags_pending = true; return guard.flags or {k = {guard.FLAG_HINT}, d = {guard.FLAG_HINT}} end
+  guard.flags_pending = false
   local k, d = {}, {}
-  -- One native pattern test per flag keeps this light on long quest lists.
+  -- Plain text tests only: the client allows about 20 ms of regex work per
+  -- update, and a pattern test on every flag of a long quest list went over it.
   for key, q in pairs(QALL) do
-    local kill = regexmatch(key, "kill|slay|cull")
+    local kill = contains(key, "kill") or contains(key, "slay") or contains(key, "cull")
     if kill or (q.m and q.m > 1) then
       local role = flag_role(key)
       if role == "counter" then k[#k + 1] = key
@@ -2407,9 +2411,11 @@ local function build(s)
     local tid = dmap[k]
     guard.DSLOT[n] = tid
     local t = task(tid)
-    fill[tid] = fill[tid] or form_from(tid)
+    -- A form made while the flag lists wait is not kept (it would miss its suggested flags).
+    local form = fill[tid] or form_from(tid)
+    if not guard.flags_pending then fill[tid] = form end
     local pfx = "d" .. n
-    local body = guard.editor_with_search(pfx, fill[tid], picker, flags, tid)
+    local body = guard.editor_with_search(pfx, form, picker, flags, tid)
     local q = t.key and (st.q[t.key] or QALL[t.key])
     if q and q.desc and q.desc ~= info[tid].name then
       table.insert(body, 1, {id = pfx .. "_desc", type = "text", size = TXT.small, text = t.key .. ": " .. q.desc})
