@@ -4,8 +4,8 @@ A kill-task tracker plugin for the AC:Unreal client. The tracker reads quest sta
 
 <img width="618" height="328" alt="KT_tracker_2" src="https://github.com/user-attachments/assets/2552f766-2297-4f96-8184-b339a5d053da" />
 <img width="989" height="379" alt="KT_tracker_3" src="https://github.com/user-attachments/assets/9af312d4-6786-4a2b-a773-2373510978ac" />
-<img width="235" height="405" alt="KT_tracker_5" src="https://github.com/user-attachments/assets/26790ff4-ecab-4766-b2c1-f00d60b4f124" />
-<img width="235" height="405" alt="KT_tracker_4" src="https://github.com/user-attachments/assets/1f271d8f-b26e-40d0-aad6-a1bc62cc813f" />
+<img width="274" height="376" alt="image" src="https://github.com/user-attachments/assets/fb136875-914b-4ddb-972c-ea984aa6e1b0" />
+
 
 ## Features
 
@@ -38,7 +38,7 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
 
 ## In game
 
-### The window
+### Plugin Window
 
 - **Show in NAV**: turns the green arrows over task monsters and NAV arrow integration on or off.
 - **Area list**: pick a hunting area, one of your own areas, or **Other**. Newly detected quests that are uncategorized will be placed into **Other**.
@@ -55,7 +55,7 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
 - **Quest flags** in the edit menu: the **counter flag** (counts your kills) and the **completion flag** (stamped when you turn the task in). They are filled in from your `/myquests` list when the tracker can tell which flags belong to the task. Type part of a flag in either box to see up to 5 matching flags (from your quest list first, then the built-in catalog and your task database), and click one to use it. A flag can belong to one task only; a flag that only an unused catalog task has is moved to yours.
   - A task's counter flag is only in your quest list while the task is in progress. The search still finds it from the catalog.
 
-### In the world
+### Navigation
 
 - **!** over quest givers, colored by task state (colors can be changed in Options).
 - **Green arrows** over task monsters near you.
@@ -66,8 +66,8 @@ Replace the files in `Installed\KT_Tracker` with the new download and press **Re
 - **Your quest list.** The tracker reads `/myquests` automatically when you log in, and every 65 seconds after that (adjustable in settings). These reads are hidden from your chat windows (adjustable in settings). A `/myquests` you type yourself always shows. The quest list overrules anything worked out from chat.
 - **Kill messages.** Lines such as "You've killed 5 out of 20 ..." update the count immediately without relying on another /myquests poll.
 - **Turn-ins and pickups.** The client tells the tracker which NPC you used, so only that NPC's replies, and server lines in the next 10 seconds, count. A turn-in is the quest giver used followed by the reward, or its completion flag stamped. After a pickup or turn-in, your quest list is read again as soon as the server allows (once per minute) to confirm it.
-- **Only the lines it needs.** The client hands the tracker only server lines it uses (quest list, kill counts, stamps, rewards, quest-giver replies) and NPC speech, so busy combat chat never delays a kill count. Other players' chat never counts as progress.
-- **Your data.** Everything is saved per character and per server, so characters with the same name on different servers stay separate.
+- **filtered chat** The client hands the tracker only server lines it uses (quest list, kill counts, stamps, rewards, quest-giver replies) and NPC speech, so busy combat chat doesn't delay a kill count. 
+- **Data** Everything is saved per character and per server, so characters with the same name on different servers stay separate.
 
 ### Manage
 
@@ -103,7 +103,7 @@ The plugin uses the following service requests:
 | waypoint | the NAV arrow |
 | data | which NPC you used, to confirm pickups and turn-ins |
 
-## Your files
+## Local Files
 
 Saved under `Saved/ClientPlugins/Profiles/kt_tracker/Library/`:
 
